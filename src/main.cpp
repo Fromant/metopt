@@ -7,7 +7,11 @@
 #include "SimplexSolver.hpp"
 
 void print_simplex_result(const std::pair<double, std::vector<double>>& result) {
-    std::cout << "Simplex result: " << result.first << "; x=(";
+    std::cout << "Simplex result: " << result.first;
+    if (result.second.empty()) {
+        return;
+    }
+    std::cout << "; x=(";
     for (int i = 0; i < result.second.size() - 1; i++) {
         std::cout << result.second[i] << ", ";
     }

@@ -1,48 +1,44 @@
 import sys
+
 import numpy as np
 from scipy.optimize import linprog
+
 
 def parse_file(filename):
     with open(filename, 'r') as f:
         lines = [line.strip() for line in f if line.strip()]
 
-    # Первая строка: min/max
     direction = lines[0].strip()
     if direction not in ('min', 'max'):
         raise ValueError("First line must be 'min' or 'max'")
     is_min = (direction == 'min')
 
-    # Вторая строка: коэффициенты целевой функции
-    c = list(map(float, lines[1].split()))
+    n = int(lines[1])
 
-    # Третья строка: число ограничений
-    num_constraints = int(lines[2])
+    c = list(map(float, lines[2].split()))
 
-    # Следующие num_constraints строк: ограничения
+    num_constraints = int(lines[3])
+
     A_ub = []
     b_ub = []
     A_eq = []
     b_eq = []
 
-    for i in range(3, 3 + num_constraints):
+    for i in range(4, 4 + num_constraints):
         parts = lines[i].split()
         if len(parts) < 2:
             raise ValueError(f"Invalid constraint line: {lines[i]}")
-        # Последний элемент — правая часть
         rhs = float(parts[-1])
-        # Предпоследний — знак
         sign = parts[-2]
-        # Остальное — коэффициенты
         coeffs = list(map(float, parts[:-2]))
 
         if len(coeffs) != len(c):
-            raise ValueError(f"Constraint {i-2}: number of coefficients ({len(coeffs)}) != variables ({len(c)})")
+            raise ValueError(f"Constraint {i - 2}: number of coefficients ({len(coeffs)}) != variables ({len(c)})")
 
         if sign == '<=':
             A_ub.append(coeffs)
             b_ub.append(rhs)
         elif sign == '>=':
-            # a^T x >= b  →  -a^T x <= -b
             A_ub.append([-x for x in coeffs])
             b_ub.append(-rhs)
         elif sign == '=':
@@ -51,12 +47,12 @@ def parse_file(filename):
         else:
             raise ValueError(f"Unknown relation '{sign}' in constraint: {lines[i]}")
 
-    # Последняя строка: ограничения на переменные
-    var_cons = lines[3 + num_constraints].split()
+    var_cons = lines[4 + num_constraints].split()
     if len(var_cons) != len(c):
         raise ValueError(f"Variable constraints count ({len(var_cons)}) != variables ({len(c)})")
 
     return is_min, np.array(c), A_ub, b_ub, A_eq, b_eq, var_cons
+
 
 def transform_to_standard(c, A_ub, b_ub, A_eq, b_eq, var_cons):
     """
@@ -73,8 +69,6 @@ def transform_to_standard(c, A_ub, b_ub, A_eq, b_eq, var_cons):
     """
     n_orig = len(c)
     new_c = []
-    new_A_ub = [] if not A_ub else [[] for _ in A_ub]
-    new_A_eq = [] if not A_eq else [[] for _ in A_eq]
 
     # Индексы новых переменных
     new_var_count = 0
@@ -84,17 +78,17 @@ def transform_to_standard(c, A_ub, b_ub, A_eq, b_eq, var_cons):
         cons = var_cons[i]
         coeff = c[i]
         if cons == '>=0':
-            # x_i >= 0 → остаётся как есть
+            # x_i >= 0 do nothing
             var_map.append([(1.0, new_var_count)])
             new_c.append(coeff)
             new_var_count += 1
         elif cons == '<=0':
-            # x_i <= 0 → замена: x_i = -y_i, y_i >= 0
+            # x_i <= 0 replace: x_i = -y_i, y_i >= 0
             var_map.append([(-1.0, new_var_count)])
             new_c.append(-coeff)
             new_var_count += 1
         elif cons == 'free':
-            # x_i = x_i^+ - x_i^-
+            # x_i -> x_i^+ - x_i^-
             var_map.append([(1.0, new_var_count), (-1.0, new_var_count + 1)])
             new_c.extend([coeff, -coeff])
             new_var_count += 2
@@ -114,6 +108,7 @@ def transform_to_standard(c, A_ub, b_ub, A_eq, b_eq, var_cons):
 
     return np.array(new_c), new_A_ub, b_ub, new_A_eq, b_eq
 
+
 def main():
     if len(sys.argv) != 2:
         filename = input("Provide filename: ")
@@ -125,7 +120,6 @@ def main():
         print(f"Error parsing file: {e}")
         sys.exit(1)
 
-    # Преобразуем к стандартной форме
     try:
         c_new, A_ub_new, b_ub_new, A_eq_new, b_eq_new = transform_to_standard(
             c, A_ub, b_ub, A_eq, b_eq, var_cons
@@ -182,6 +176,7 @@ def main():
     print("x =", " ".join(f"{xi:.6g}" for xi in x_orig))
     print("x' =", " ".join(f"{xi:.6g}" for xi in res.x))
     print("Objective value =", f"{objective_value:.6g}")
+
 
 if __name__ == "__main__":
     main()

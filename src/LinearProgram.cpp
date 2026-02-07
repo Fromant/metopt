@@ -108,14 +108,20 @@ LinearProgram LinearProgram::read_from_file(const std::string& filename) {
     }
     bool minimize = (line == "min");
 
+    if (!std::getline(file, line)) {
+        std::cerr << "Error: first line must be 'min' or 'max'" << std::endl;
+        std::exit(1);
+    }
+    size_t n = std::stoi(line);
+
     // Read objective coefficients
     if (!std::getline(file, line)) {
         std::cerr << "Error: missing objective function coefficients" << std::endl;
         std::exit(1);
     }
     std::istringstream obj_stream(line);
-    std::vector<double> objective(5);
-    for (int i = 0; i < 5; ++i) {
+    std::vector<double> objective(n);
+    for (int i = 0; i < n; ++i) {
         if (!(obj_stream >> objective[i])) {
             std::cerr << "Error: invalid objective function coefficients" << std::endl;
             std::exit(1);
@@ -130,13 +136,13 @@ LinearProgram LinearProgram::read_from_file(const std::string& filename) {
     }
     file.ignore(); // Skip newline
 
-    std::vector<std::vector<double>> constraints(m, std::vector<double>(5));
+    std::vector<std::vector<double>> constraints(m, std::vector<double>(n));
     std::vector<std::string> relations(m);
     std::vector<double> rhs(m);
 
     // Read constraints
     for (int i = 0; i < m; ++i) {
-        for (int j = 0; j < 5; ++j) {
+        for (int j = 0; j < n; ++j) {
             if (!(file >> constraints[i][j])) {
                 std::cerr << "Error: missing coefficients in constraint " << (i + 1) << std::endl;
                 std::exit(1);
@@ -156,8 +162,8 @@ LinearProgram LinearProgram::read_from_file(const std::string& filename) {
     }
 
     // Read variable constraints
-    std::vector<std::string> var_constraints(5);
-    for (int i = 0; i < 5; ++i) {
+    std::vector<std::string> var_constraints(n);
+    for (int i = 0; i < n; ++i) {
         if (!(file >> var_constraints[i]) || !is_valid_variable_constraint(var_constraints[i])) {
             std::cerr << "Error: invalid constraint '" << var_constraints[i] << "' for variable x" << (i + 1)
                       << std::endl;
@@ -180,9 +186,12 @@ LinearProgram LinearProgram::read_from_console() {
     }
     bool minimize = (obj_type == "min");
 
-    std::cout << "Enter 5 objective function coefficients (space-separated):" << std::endl;
-    std::vector<double> objective(5);
-    for (int i = 0; i < 5; ++i) {
+    std::cout << "Enter num of variables: ";
+    int n = 0;
+    std::cin >> n;
+    std::cout << "Enter " << n << " objective function coefficients (space-separated):" << std::endl;
+    std::vector<double> objective(n);
+    for (int i = 0; i < n; ++i) {
         if (!(std::cin >> objective[i])) {
             std::cerr << "Error: invalid objective coefficients" << std::endl;
             std::exit(1);
@@ -197,14 +206,14 @@ LinearProgram LinearProgram::read_from_console() {
         std::exit(1);
     }
 
-    std::vector<std::vector<double>> constraints(m, std::vector<double>(5));
+    std::vector<std::vector<double>> constraints(m, std::vector<double>(n));
     std::vector<std::string> relations(m);
     std::vector<double> rhs(m);
 
-    std::cout << "Enter constraints (each: 5 coefficients, type <=/>=/=, RHS value):" << std::endl;
+    std::cout << "Enter constraints (each: " << n << " coefficients, type <=/>=/=, RHS value):" << std::endl;
     for (int i = 0; i < m; ++i) {
         std::cout << "Constraint " << (i + 1) << ": ";
-        for (int j = 0; j < 5; ++j) {
+        for (int j = 0; j < n; ++j) {
             if (!(std::cin >> constraints[i][j])) {
                 std::cerr << "Error: invalid coefficients in constraint " << (i + 1) << std::endl;
                 std::exit(1);
@@ -223,8 +232,8 @@ LinearProgram LinearProgram::read_from_console() {
 
     std::cout << "Enter variable constraints (x1..x5):" << std::endl;
     std::cout << "Available values: >=0, <=0, free" << std::endl;
-    std::vector<std::string> var_constraints(5);
-    for (int i = 0; i < 5; ++i) {
+    std::vector<std::string> var_constraints(n);
+    for (int i = 0; i < n; ++i) {
         std::cout << "x" << (i + 1) << " = ";
         std::cin >> var_constraints[i];
         if (!is_valid_variable_constraint(var_constraints[i])) {

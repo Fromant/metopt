@@ -6,7 +6,7 @@
 #include <vector>
 
 /**
- * LinearProgram - represents a linear programming problem with 5 decision variables.
+ * LinearProgram - represents a linear programming problem
  *
  * Example problem:
  *   minimize: 2*x1 + 3*x2 - x3
