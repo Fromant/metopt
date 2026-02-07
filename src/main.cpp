@@ -1,8 +1,18 @@
-#include "LinearProgram.hpp"
-#include "FormConverter.hpp"
-#include "DualBuilder.hpp"
 #include <iostream>
 #include <string>
+#include "DualBuilder.hpp"
+#include "FormConverter.hpp"
+#include "LinearProgram.hpp"
+
+#include "SimplexSolver.hpp"
+
+void print_simplex_result(const std::pair<double, std::vector<double>>& result) {
+    std::cout << "Simplex result: " << result.first << "; x=(";
+    for (int i = 0; i < result.second.size() - 1; i++) {
+        std::cout << result.second[i] << ", ";
+    }
+    std::cout << result.second[result.second.size() - 1] << ")" << std::endl;
+}
 
 int main(int argc, char* argv[]) {
     std::cout << std::fixed << std::setprecision(2);
@@ -43,6 +53,24 @@ int main(int argc, char* argv[]) {
     canonical.print("CANONICAL FORM (formula 4.3)");
     LinearProgram dual_canonical = DualBuilder::build_dual(canonical);
     dual_canonical.print("DUAL PROBLEM FOR CANONICAL FORM");
+
+    // Пример задачи: минимизировать x1 + x2 при условии x1 + x2 = 1, x1,x2 >= 0
+    LinearProgram lp(true, // минимизация
+                     {1.0, 1.0}, // целевая функция
+                     {{1.0, 1.0}}, // матрица ограничений
+                     {"="}, // типы ограничений
+                     {1.0}, // правая часть
+                     {">=0", ">=0"} // ограничения на переменные
+    );
+
+    {
+        const auto r = SimplexSolver::solve(lp);
+        print_simplex_result({r.objective_value, r.x});
+    }
+    {
+        const auto r = SimplexSolver::solve(canonical);
+        print_simplex_result({r.objective_value, r.x});
+    }
 
     return 0;
 }

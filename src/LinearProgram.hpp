@@ -23,17 +23,6 @@
  *   - rhs_: right-hand side vector b = [b₁, b₂, ..., bₘ]
  *   - var_constraints_: variable sign constraints [">=0", "<=0", "free"] for x₁..x₅
  */
-
-// c^T*x -> min/max
-// Ax_i-b_i >= 0
-// Ax_i-b_i =  0
-//
-// c = objective_
-// A = constraints_
-// rhs = b
-//
-// var_constraints:
-// x_i >= 0 or x_i = 0 x_i <= or x_i free
 class LinearProgram {
     bool minimize_; // Optimization direction: true = min, false = max
     std::vector<double> objective_; // Objective coefficients c (size = number of variables)
@@ -166,11 +155,5 @@ public:
         }
     }
 
-    static std::string format_coeff(double coeff, const std::string& var, bool first);
-
-    // Output methods
     void print(const std::string& title) const;
-
-    // Utility for debugging
-    void debug_print() const;
 };

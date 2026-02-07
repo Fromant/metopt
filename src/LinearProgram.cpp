@@ -13,7 +13,7 @@ LinearProgram::LinearProgram(bool minimize, std::vector<double> objective, std::
     prettierCoeffs();
 }
 
-std::string LinearProgram::format_coeff(double coeff, const std::string& var, bool first) {
+std::string format_coeff(double coeff, const std::string& var, bool first) {
     std::ostringstream oss;
     if (std::abs(coeff) < 1e-9)
         return "";
@@ -41,7 +41,7 @@ void print_objective(const LinearProgram& lp, const std::string& prefix) {
     bool first = true;
     size_t n = lp.num_variables();
     for (int i = 0; i < n; ++i) {
-        std::string term = LinearProgram::format_coeff(lp.objective()[i], "x" + std::to_string(i + 1), first);
+        std::string term = format_coeff(lp.objective()[i], "x" + std::to_string(i + 1), first);
         if (!term.empty()) {
             std::cout << term;
             first = false;
@@ -60,7 +60,7 @@ void print_constraints(const LinearProgram& lp, const std::string& prefix) {
         std::cout << prefix;
         bool first = true;
         for (int j = 0; j < n; ++j) {
-            std::string term = LinearProgram::format_coeff(lp.constraints()[i][j], "x" + std::to_string(j + 1), first);
+            std::string term = format_coeff(lp.constraints()[i][j], "x" + std::to_string(j + 1), first);
             if (!term.empty()) {
                 std::cout << term;
                 first = false;
@@ -244,18 +244,4 @@ bool LinearProgram::is_valid_constraint_type(const std::string& rel) {
 
 bool LinearProgram::is_valid_variable_constraint(const std::string& constraint) {
     return (constraint == ">=0" || constraint == "<=0" || constraint == "free");
-}
-
-// Debug output
-void LinearProgram::debug_print() const {
-    std::cout << "DEBUG: minimize=" << minimize_ << ", vars=" << num_variables()
-              << ", constraints=" << num_constraints() << std::endl;
-    std::cout << "Objective: ";
-    for (double c : objective_)
-        std::cout << c << " ";
-    std::cout << std::endl;
-    std::cout << "Var constraints: ";
-    for (const std::string& vc : var_constraints_)
-        std::cout << vc << " ";
-    std::cout << std::endl;
 }
