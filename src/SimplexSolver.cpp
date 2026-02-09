@@ -11,11 +11,46 @@
 constexpr double TOL = 1e-9;
 constexpr int MAX_ITERATIONS = 1000;
 
+// Восстанавливает решение исходной задачи из решения канонической формы
+std::vector<double> restore_original_solution(const LinearProgram& original_lp,
+                                              const std::vector<double>& canonical_solution) {
+    const int n_orig = original_lp.num_variables();
+    std::vector<double> original_solution(n_orig, 0.0);
+
+    // Определяем позиции "минус" частей для свободных переменных
+    // Пример: если свободные переменные имеют индексы [3, 4] в исходной задаче,
+    // то их "минус" части будут находиться по индексам [n_orig + 0, n_orig + 1]
+    std::vector<int> free_neg_indices;
+    for (int i = 0; i < n_orig; ++i) {
+        if (original_lp.var_constraints()[i] == "free") {
+            free_neg_indices.push_back(n_orig + static_cast<int>(free_neg_indices.size()));
+        }
+    }
+
+    // Восстанавливаем значения переменных
+    int free_counter = 0;
+    for (int i = 0; i < n_orig; ++i) {
+        if (original_lp.var_constraints()[i] == "free") {
+            // x_free = x+ - x-
+            double pos_part = i < canonical_solution.size() ? canonical_solution[i] : 0.0;
+            double neg_part =
+                (free_counter < free_neg_indices.size() && free_neg_indices[free_counter] < canonical_solution.size())
+                ? canonical_solution[free_neg_indices[free_counter]]
+                : 0.0;
+            original_solution[i] = pos_part - neg_part;
+            free_counter++;
+        } else {
+            // Неотрицательные переменные берём напрямую
+            original_solution[i] = (i < canonical_solution.size()) ? canonical_solution[i] : 0.0;
+        }
+    }
+
+    return original_solution;
+}
+
 std::optional<SimplexSolver::Solution> SimplexSolver::solve(const LinearProgram& lp, bool verbose) {
 
     const LinearProgram canonical_lp = FormConverter::to_canonical_form(lp);
-
-    bool doChangeSign = !lp.is_minimization();
 
     if (verbose) {
         canonical_lp.print("Solving next problem by simplex (transformed to canonical form)");
@@ -35,7 +70,7 @@ std::optional<SimplexSolver::Solution> SimplexSolver::solve(const LinearProgram&
         }
     }
 
-    if (phase1_obj > TOL) {
+    if (std::abs(phase1_obj) > TOL) {
         if (verbose) {
             std::cout << "\n===== INFEASIBLE PROBLEM =====" << std::endl;
             std::cout << "Phase I objective value = " << phase1_obj << " > tolerance (" << TOL << ")" << std::endl;
@@ -44,7 +79,6 @@ std::optional<SimplexSolver::Solution> SimplexSolver::solve(const LinearProgram&
         return Solution{{}, 0.0, false, true, 0, "Infeasible"};
     }
 
-    // Remove artificial variables from basis
     if (verbose) {
         std::cout << "\n===== REMOVING ARTIFICIAL VARIABLES FROM BASIS =====" << std::endl;
     }
@@ -53,7 +87,12 @@ std::optional<SimplexSolver::Solution> SimplexSolver::solve(const LinearProgram&
     // PHASE II: Optimize original objective
     auto result = phase2(state, canonical_lp, verbose);
 
-    result.objective_value *= doChangeSign ? -1 : 1;
+    result.x = restore_original_solution(lp, result.x);
+
+    // Коррекция знака целевой функции для задач максимизации
+    if (!lp.is_minimization()) {
+        result.objective_value = -result.objective_value;
+    }
 
     return result;
 }

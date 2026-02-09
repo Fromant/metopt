@@ -110,9 +110,6 @@ int main(int argc, char* argv[]) {
     }
     {
         const auto dual = DualBuilder::build_dual(original);
-        dual.print("dual to input");
-        const auto dual_canon = FormConverter::to_canonical_form(dual);
-        dual_canon.print("canon of dual to input");
         const auto r = SimplexSolver::solve(dual, false);
         print_solution(r);
     }
