@@ -89,6 +89,7 @@ void LinearProgram::print(const std::string& title) const {
     std::cout << "  subject to:" << std::endl;
     print_constraints(*this, "    ");
     print_variable_constraints(*this, "    ");
+    std::cout << "  form: " << FormToString(this->getForm()) << std::endl;
 }
 
 // Read from file

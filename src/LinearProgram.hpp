@@ -33,6 +33,20 @@ class LinearProgram {
 
 public:
     enum Form { GENERAL, SYMMETRIC, CANONIC, UNDEFINED };
+    constexpr static std::string FormToString(Form f) {
+        if (f == GENERAL) {
+            return "general";
+        }
+
+        if (f == SYMMETRIC) {
+            return "symmetric";
+        }
+        if (f == CANONIC) {
+            return "canonic";
+        }
+        return "undefined";
+    }
+
 
     // Constructors
     LinearProgram();
@@ -88,7 +102,7 @@ public:
         const bool isAllConstraintsEorGE =
             std::ranges::all_of(relations(), [](const std::string& f) { return f == "=" || f == ">="; });
         const bool isAllVarConstraintsGEorFree =
-            std::ranges::all_of(var_constraints(), [](const std::string& f) { return f == "free" || f==">=0"; });
+            std::ranges::all_of(var_constraints(), [](const std::string& f) { return f == "free" || f == ">=0"; });
 
         if (isAllConstraintsEorGE && isAllVarConstraintsGEorFree) {
             return GENERAL;
