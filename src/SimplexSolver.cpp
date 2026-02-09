@@ -49,15 +49,18 @@ std::vector<double> restore_original_solution(const LinearProgram& original_lp,
 }
 
 std::optional<SimplexSolver::Solution> SimplexSolver::solve(const LinearProgram& lp, bool verbose) {
-
-    const LinearProgram canonical_lp = FormConverter::to_canonical_form(lp);
-
     if (verbose) {
-        canonical_lp.print("Solving next problem by simplex (transformed to canonical form)");
+        lp.print("Simplex solver. Original problem:");
+    }
+
+    const LinearProgram canonical = FormConverter::to_canonical_form(lp);
+
+    if (verbose && lp.getForm() != LinearProgram::CANONIC) {
+        canonical.print("Problem in canonical form: ");
     }
 
     // PHASE I: Find feasible solution using artificial basis
-    auto state_opt = phase1(canonical_lp, verbose);
+    auto state_opt = phase1(canonical, verbose);
     if (!state_opt)
         return std::nullopt;
     auto state = *state_opt;
@@ -82,10 +85,10 @@ std::optional<SimplexSolver::Solution> SimplexSolver::solve(const LinearProgram&
     if (verbose) {
         std::cout << "\n===== REMOVING ARTIFICIAL VARIABLES FROM BASIS =====" << std::endl;
     }
-    remove_artificial_vars(state, canonical_lp.num_variables(), verbose);
+    remove_artificial_vars(state, canonical.num_variables(), verbose);
 
     // PHASE II: Optimize original objective
-    auto result = phase2(state, canonical_lp, verbose);
+    auto result = phase2(state, canonical, verbose);
 
     result.x = restore_original_solution(lp, result.x);
 

@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 #include "DualBuilder.hpp"
+#include "EnumSolver.hpp"
 #include "FormConverter.hpp"
 #include "LinearProgram.hpp"
 
@@ -32,13 +33,13 @@ void print_solution(const std::optional<SimplexSolver::Solution>& res_opt) {
     };
 
     if (res.is_infeasible) {
-        std::cout << "Simplex failed: task is infeasible";
+        std::cout << "Simplex failed: task is infeasible" << std::endl;
         print_status();
         return;
     }
 
     if (res.is_unbounded) {
-        std::cout << "Simplex failed: task is unbounded";
+        std::cout << "Simplex failed: task is unbounded" << std::endl;
         print_status();
         return;
     }
@@ -48,6 +49,51 @@ void print_solution(const std::optional<SimplexSolver::Solution>& res_opt) {
     std::cout << "\tx: ";
     print_vector(res.x);
     std::cout << "\tIterations: " << res.iterations << std::endl;
+    print_status();
+}
+
+void print_enum_solution(const EnumSolver::Solution& res) {
+    const auto print_status = [&res]() {
+        if (!res.status_message.empty()) {
+            std::cout << "Status: " << res.status_message;
+        }
+        std::cout << std::endl;
+    };
+
+    const auto print_vector = []<typename T>(const std::vector<T>& t) {
+        std::cout << '(';
+        if (!t.empty()) {
+            for (int i = 0; i < t.size() - 1; i++) {
+                std::cout << t[i] << ", ";
+            }
+            std::cout << t[t.size() - 1];
+        }
+        std::cout << ')' << std::endl;
+    };
+
+    if (!res.is_feasible) {
+        std::cout << "Enum solver failed: task is infeasible" << std::endl;
+        print_status();
+        return;
+    }
+
+    if (res.is_unbounded) {
+        std::cout << "Enum solver failed: task is unbounded" << std::endl;
+        print_status();
+        return;
+    }
+
+    if (!res.is_optimal) {
+        std::cout << "Enum solver failed: result is not optimal" << std::endl;
+        print_status();
+        // return;
+    }
+    std::cout << "Enum solver solution:" << std::endl;
+    std::cout << "\tObjective value: " << res.objective_value << std::endl;
+    std::cout << "\tx: ";
+    print_vector(res.x);
+    std::cout << "\tbasis: ";
+    print_vector(res.basis);
     print_status();
 }
 
@@ -99,19 +145,27 @@ int main(int argc, char* argv[]) {
     {
         const auto r = SimplexSolver::solve(lp, false);
         print_solution(r);
+        const auto r1 = EnumSolver::solve(lp);
+        print_enum_solution(r1);
     }
     {
         const auto r = SimplexSolver::solve(canonical, false);
         print_solution(r);
+        const auto r1 = EnumSolver::solve(canonical);
+        print_enum_solution(r1);
     }
     {
         const auto r = SimplexSolver::solve(original, false);
         print_solution(r);
+        const auto r1 = EnumSolver::solve(original, false);
+        print_enum_solution(r1);
     }
     {
         const auto dual = DualBuilder::build_dual(original);
         const auto r = SimplexSolver::solve(dual, false);
         print_solution(r);
+        const auto r1 = EnumSolver::solve(dual, false);
+        print_enum_solution(r1);
     }
 
     return 0;

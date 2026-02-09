@@ -22,7 +22,9 @@ add_executable(metopt
         src/LinearProgram.cpp
         src/FormConverter.cpp
         src/DualBuilder.cpp
-        src/SimplexSolver.cpp)
+        src/SimplexSolver.cpp
+        src/EnumSolver.cpp
+)
 
 target_link_libraries(metopt PRIVATE Eigen3::Eigen)
 
