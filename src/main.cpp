@@ -6,24 +6,53 @@
 
 #include "SimplexSolver.hpp"
 
-void print_simplex_result(const std::pair<double, std::vector<double>>& result) {
-    std::cout << "Simplex result: " << result.first;
-    if (result.second.empty()) {
+void print_solution(const std::optional<SimplexSolver::Solution>& res_opt) {
+    if (!res_opt) {
+        std::cout << "Simplex failed" << std::endl;
         return;
     }
-    std::cout << "; x=(";
-    for (int i = 0; i < result.second.size() - 1; i++) {
-        std::cout << result.second[i] << ", ";
+    const auto& res = res_opt.value();
+
+    const auto print_status = [&res]() {
+        if (!res.status.empty()) {
+            std::cout << "Status: " << res.status;
+        }
+        std::cout << std::endl;
+    };
+
+    const auto print_vector = [](const std::vector<double>& t) {
+        std::cout << '(';
+        if (!t.empty()) {
+            for (int i = 0; i < t.size() - 1; i++) {
+                std::cout << t[i] << ", ";
+            }
+            std::cout << t[t.size() - 1];
+        }
+        std::cout << ')' << std::endl;
+    };
+
+    if (res.is_infeasible) {
+        std::cout << "Simplex failed: task is infeasible";
+        print_status();
+        return;
     }
-    std::cout << result.second[result.second.size() - 1] << ")" << std::endl;
+
+    if (res.is_unbounded) {
+        std::cout << "Simplex failed: task is unbounded";
+        print_status();
+        return;
+    }
+
+    std::cout << "Simplex solution:" << std::endl;
+    std::cout << "\tObjective value: " << res.objective_value << std::endl;
+    std::cout << "\tx: ";
+    print_vector(res.x);
+    std::cout << "\tIterations: " << res.iterations << std::endl;
+    print_status();
 }
 
 int main(int argc, char* argv[]) {
     std::cout << std::fixed << std::setprecision(2);
-
-    std::cout << "Linear Programming Forms Converter" << std::endl;
-    std::cout << "Converts LP problems to general, symmetric, and canonical forms" << std::endl;
-    std::cout << "and constructs corresponding dual problems." << std::endl;
 
     // Determine input source
     LinearProgram original;
@@ -38,7 +67,7 @@ int main(int argc, char* argv[]) {
         original = LinearProgram::read_from_console();
     }
 
-    std::cout << "Form of input LP problem: " << original.getForm() << std::endl;
+    original.print("Input problem:");
 
     // Convert to general form (formula 4.1) - this is the canonical "general form"
     LinearProgram general = FormConverter::to_general_form(original);
@@ -68,12 +97,24 @@ int main(int argc, char* argv[]) {
     );
 
     {
-        const auto r = SimplexSolver::solve(lp);
-        print_simplex_result({r.objective_value, r.x});
+        const auto r = SimplexSolver::solve(lp, false);
+        print_solution(r);
     }
     {
-        const auto r = SimplexSolver::solve(canonical);
-        print_simplex_result({r.objective_value, r.x});
+        const auto r = SimplexSolver::solve(canonical, false);
+        print_solution(r);
+    }
+    {
+        const auto r = SimplexSolver::solve(original, false);
+        print_solution(r);
+    }
+    {
+        const auto dual = DualBuilder::build_dual(original);
+        dual.print("dual to input");
+        const auto dual_canon = FormConverter::to_canonical_form(dual);
+        dual_canon.print("canon of dual to input");
+        const auto r = SimplexSolver::solve(dual, false);
+        print_solution(r);
     }
 
     return 0;

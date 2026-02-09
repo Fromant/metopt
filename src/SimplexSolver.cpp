@@ -1,258 +1,474 @@
 #include "SimplexSolver.hpp"
 
-#include <Eigen/Dense>
-
+#include <algorithm>
+#include <cmath>
+#include <iomanip>
 #include <iostream>
-#include <numeric>
-#include <stdexcept>
+#include <limits>
 
-const double EPS = 1e-9;
+#include "FormConverter.hpp"
 
-// Вспомогательная функция: проверка ранга
-size_t matrix_rank(const std::vector<std::vector<double>>& A) {
-    if (A.empty() || A[0].empty())
-        return 0;
-    int m = A.size();
-    int n = A[0].size();
-    Eigen::MatrixXd M(m, n);
-    for (int i = 0; i < m; ++i)
-        for (int j = 0; j < n; ++j)
-            M(i, j) = A[i][j];
-    return M.fullPivLu().rank();
+constexpr double TOL = 1e-9;
+constexpr int MAX_ITERATIONS = 1000;
+
+std::optional<SimplexSolver::Solution> SimplexSolver::solve(const LinearProgram& lp, bool verbose) {
+
+    const LinearProgram canonical_lp = FormConverter::to_canonical_form(lp);
+
+    bool doChangeSign = !lp.is_minimization();
+
+    if (verbose) {
+        canonical_lp.print("Solving next problem by simplex (transformed to canonical form)");
+    }
+
+    // PHASE I: Find feasible solution using artificial basis
+    auto state_opt = phase1(canonical_lp, verbose);
+    if (!state_opt)
+        return std::nullopt;
+    auto state = *state_opt;
+
+    // Check feasibility (Theorem 4.1)
+    double phase1_obj = 0.0;
+    for (int i = 0; i < state.m; ++i) {
+        if (state.basis[i] >= state.n) { // Artificial variable in basis
+            phase1_obj += state.x_B(i);
+        }
+    }
+
+    if (phase1_obj > TOL) {
+        if (verbose) {
+            std::cout << "\n===== INFEASIBLE PROBLEM =====" << std::endl;
+            std::cout << "Phase I objective value = " << phase1_obj << " > tolerance (" << TOL << ")" << std::endl;
+            std::cout << "Original problem has no feasible solution." << std::endl;
+        }
+        return Solution{{}, 0.0, false, true, 0, "Infeasible"};
+    }
+
+    // Remove artificial variables from basis
+    if (verbose) {
+        std::cout << "\n===== REMOVING ARTIFICIAL VARIABLES FROM BASIS =====" << std::endl;
+    }
+    remove_artificial_vars(state, canonical_lp.num_variables(), verbose);
+
+    // PHASE II: Optimize original objective
+    auto result = phase2(state, canonical_lp, verbose);
+
+    result.objective_value *= doChangeSign ? -1 : 1;
+
+    return result;
 }
 
-// Внутренняя структура результата симплекса
-struct SimplexInternalResult {
-    bool feasible = true;
-    bool bounded = true;
-    std::vector<size_t> basis;
-    std::vector<double> x_b; // базисное решение
-    double objective_value = 0.0;
-};
+std::optional<SimplexSolver::SimplexState> SimplexSolver::phase1(const LinearProgram& lp, bool verbose) {
+    const int m = lp.num_constraints();
+    const int n = lp.num_variables();
 
-// Реализация ревизионного симплекса (как в методичке)
-SimplexInternalResult solve_simplex(const std::vector<double>& c, const std::vector<std::vector<double>>& A_mat,
-                                    const std::vector<double>& b_vec, std::vector<size_t> basis, bool is_auxiliary) {
-    const size_t m = A_mat.size();
-    const size_t n_total = c.size();
-    const size_t max_iter = 10000;
+    Eigen::MatrixXd A(m, n);
+    Eigen::VectorXd b(m);
+    prepare_rhs_nonnegative(A, b, lp);
 
-    Eigen::Map<const Eigen::VectorXd> b(b_vec.data(), m);
-    Eigen::MatrixXd A(m, n_total);
-    for (size_t i = 0; i < m; ++i)
-        for (size_t j = 0; j < n_total; ++j)
-            A(i, j) = A_mat[i][j];
+    // Extended matrix for Phase I: [A | I] (equation 5.11)
+    Eigen::MatrixXd A_ext(m, n + m);
+    A_ext.leftCols(n) = A;
+    A_ext.rightCols(m) = Eigen::MatrixXd::Identity(m, m);
 
-    for (size_t iter = 0; iter < max_iter; ++iter) {
-        // 1. Строим B и c_B
-        Eigen::MatrixXd B(m, m);
+    // Phase I objective: min sum of artificial variables
+    Eigen::VectorXd c_phase1(n + m);
+    c_phase1.head(n).setZero();
+    c_phase1.tail(m).setOnes();
+
+    // Initial basis: artificial variables (indices n..n+m-1)
+    std::vector<int> basis(m);
+    for (int i = 0; i < m; ++i)
+        basis[i] = n + i;
+
+    // Initial basic solution: x_B = b
+    Eigen::VectorXd x_B = b;
+
+    // Initial inverse basis matrix: B = I => B⁻¹ = I
+    Eigen::MatrixXd B_inv = Eigen::MatrixXd::Identity(m, m);
+
+    if (verbose) {
+        std::cout << "\n===== PHASE I: FINDING FEASIBLE SOLUTION =====" << std::endl;
+        std::cout << "Problem dimensions: " << m << " constraints, " << n << " original variables" << std::endl;
+        std::cout << "Added " << m << " artificial variables" << std::endl;
+        std::cout << "Initial basis: {";
+        for (size_t i = 0; i < basis.size(); ++i) {
+            std::cout << basis[i] << (i < basis.size() - 1 ? ", " : "");
+        }
+        std::cout << "}" << std::endl;
+    }
+
+    int iter = 0;
+    while (iter < MAX_ITERATIONS) {
+        // STEP 1: Compute dual variables y = c_B · B⁻¹ (equation 5.2)
         Eigen::VectorXd c_B(m);
-        for (size_t i = 0; i < m; ++i) {
-            size_t col = basis[i];
-            B.col(i) = A.col(col);
-            c_B(i) = c[col];
+        for (int i = 0; i < m; ++i)
+            c_B(i) = c_phase1(basis[i]);
+        Eigen::VectorXd y = step1_compute_dual_vars(c_B, B_inv);
+
+        // STEP 2: Compute reduced costs d = c - Aᵀ·y (equations 5.3-5.5)
+        Eigen::VectorXd d = step2_compute_reduced_costs(c_phase1, y, A_ext);
+
+        // STEP 3: Check optimality condition (4.20)
+        auto [optimal, entering] = step3_check_optimality(d, basis, n + m);
+        if (optimal) {
+            if (verbose) {
+                std::cout << "\nPhase I completed in " << iter << " iterations" << std::endl;
+                double obj_val = 0.0;
+                for (int i = 0; i < m; ++i) {
+                    if (basis[i] >= n)
+                        obj_val += x_B(i);
+                }
+                std::cout << "Phase I objective value: " << obj_val << std::endl;
+            }
+            return SimplexState{A_ext, b, c_phase1, basis, x_B, B_inv, m, n + m};
         }
 
-        // 2. Вычисляем B^{-1}
-        Eigen::MatrixXd B_inv;
-        Eigen::FullPivLU<Eigen::MatrixXd> lu(B);
-        if (lu.rank() < m) {
-            // Вырожденная базисная матрица — ошибка
-            return SimplexInternalResult{.feasible = false};
+        // STEP 4: Compute descent direction u = B⁻¹ · a_j (before equation 5.7)
+        Eigen::VectorXd a_j = A_ext.col(entering);
+        Eigen::VectorXd u = step4_compute_direction(B_inv, a_j);
+
+        // STEP 5: Check unboundedness
+        if (step5_check_unboundedness(u)) {
+            if (verbose)
+                std::cerr << "Error: Phase I is unbounded (original problem infeasible)" << std::endl;
+            return std::nullopt;
         }
-        B_inv = lu.inverse();
 
-        // 3. x_B = B^{-1} b
-        Eigen::VectorXd x_B = B_inv * b;
+        // STEP 6: Select leaving variable and step size \theta (equation 5.6)
+        auto [leaving_idx, theta] = step6_select_leaving_variable(x_B, u);
+        if (leaving_idx == -1) {
+            if (verbose)
+                std::cerr << "Error: No leaving variable found" << std::endl;
+            return std::nullopt;
+        }
 
-        // Проверка допустимости
-        bool feasible = true;
-        for (int i = 0; i < m; ++i) {
-            if (x_B(i) < -EPS) {
-                feasible = false;
-                break;
+        bool degenerate = (theta < TOL);
+        int leaving_var = basis[leaving_idx];
+
+        // STEP 7: Update solution x_new = x_old - θ·u (equation 5.7)
+        x_B = step7_update_solution(x_B, u, theta, leaving_idx);
+
+        // STEP 8: Update inverse basis matrix B⁻¹_new = F · B⁻¹_old (equations 5.8-5.10)
+        B_inv = step8_update_basis_inverse(B_inv, u, leaving_idx);
+
+        // Update basis
+        basis[leaving_idx] = entering;
+
+        print_iteration(iter, entering, leaving_var, leaving_idx, theta, basis, x_B, d(entering), degenerate, verbose);
+
+        iter++;
+    }
+
+    if (verbose)
+        std::cerr << "Error: Maximum iterations exceeded in Phase I" << std::endl;
+    return std::nullopt;
+}
+
+SimplexSolver::Solution SimplexSolver::phase2(SimplexSolver::SimplexState state, const LinearProgram& lp,
+                                              bool verbose) {
+    // Restore original objective function (only first n variables)
+    Eigen::VectorXd c_original(lp.num_variables());
+    for (int i = 0; i < lp.num_variables(); ++i) {
+        c_original(i) = lp.objective()[i];
+    }
+    state.c = c_original;
+    state.n = lp.num_variables();
+
+    if (verbose) {
+        std::cout << "\n===== PHASE II: OPTIMIZING ORIGINAL OBJECTIVE =====" << std::endl;
+        std::cout << "Initial basis: {";
+        for (size_t i = 0; i < state.basis.size(); ++i) {
+            std::cout << state.basis[i] << (i < state.basis.size() - 1 ? ", " : "");
+        }
+        std::cout << "}" << std::endl;
+    }
+
+    int iter = 0;
+    int degenerate_count = 0;
+
+    while (iter < MAX_ITERATIONS) {
+        // STEP 1: Compute dual variables
+        Eigen::VectorXd c_B(state.m);
+        for (int i = 0; i < state.m; ++i) {
+            if (state.basis[i] >= state.n) {
+                c_B(i) = 0.0; // Artificial variables don't affect objective in Phase II
+            } else {
+                c_B(i) = state.c(state.basis[i]);
             }
         }
-        if (!feasible) {
-            return SimplexInternalResult{.feasible = false};
+        Eigen::VectorXd y = step1_compute_dual_vars(c_B, state.B_inv);
+
+        // STEP 2: Compute reduced costs (only for original variables)
+        Eigen::VectorXd d = step2_compute_reduced_costs(state.c, y, state.A.leftCols(state.n));
+
+        // STEP 3: Check optimality
+        auto [optimal, entering] = step3_check_optimality(d, state.basis, state.n);
+        if (optimal) {
+            if (verbose) {
+                std::cout << "\n===== OPTIMAL SOLUTION FOUND =====" << std::endl;
+                if (degenerate_count > 0) {
+                    std::cout << "Degenerate pivots encountered: " << degenerate_count << std::endl;
+                }
+            }
+            break;
         }
 
-        // 4. y = c_B^T * B^{-1}
-        Eigen::RowVectorXd y = c_B.transpose() * B_inv;
+        // STEPS 4-8: Same as Phase I
+        Eigen::VectorXd a_j = state.A.col(entering);
+        Eigen::VectorXd u = step4_compute_direction(state.B_inv, a_j);
 
-        // 5. Оценки d_j = c_j - y * A_j
-        int entering = -1;
-        for (size_t j = 0; j < n_total; ++j) {
-            double d_j = c[j] - y.dot(A.col(j));
-            if (d_j < -EPS) {
-                entering = static_cast<int>(j);
-                break; // правило Бленда: минимальный индекс
+        if (step5_check_unboundedness(u)) {
+            if (verbose)
+                std::cout << "\n===== UNBOUNDED PROBLEM =====" << std::endl;
+            return Solution{{}, 0.0, true, false, iter, "Unbounded"};
+        }
+
+        auto [leaving_idx, theta] = step6_select_leaving_variable(state.x_B, u);
+        if (leaving_idx == -1) {
+            if (verbose)
+                std::cerr << "Error: No leaving variable found in Phase II" << std::endl;
+            return Solution{{}, 0.0, false, true, iter, "Error"};
+        }
+
+        bool degenerate = (theta < TOL);
+        if (degenerate)
+            degenerate_count++;
+        int leaving_var = state.basis[leaving_idx];
+
+        state.x_B = step7_update_solution(state.x_B, u, theta, leaving_idx);
+        state.B_inv = step8_update_basis_inverse(state.B_inv, u, leaving_idx);
+        state.basis[leaving_idx] = entering;
+
+        print_iteration(iter, entering, leaving_var, leaving_idx, theta, state.basis, state.x_B, d(entering),
+                        degenerate, verbose);
+
+        iter++;
+    }
+
+    // Construct full solution vector (only original variables)
+    std::vector<double> solution(lp.num_variables(), 0.0);
+    for (int i = 0; i < state.m; ++i) {
+        if (state.basis[i] < lp.num_variables()) {
+            solution[state.basis[i]] = state.x_B(i);
+        }
+    }
+
+    // Compute objective value
+    double obj_value = 0.0;
+    for (int i = 0; i < lp.num_variables(); ++i) {
+        obj_value += lp.objective()[i] * solution[i];
+    }
+
+    if (verbose) {
+        std::cout << "\n===== FINAL SOLUTION =====" << std::endl;
+        std::cout << "Objective value: " << std::fixed << std::setprecision(6) << obj_value << std::endl;
+        std::cout << "Solution vector: [";
+        for (int i = 0; i < lp.num_variables(); ++i) {
+            std::cout << solution[i] << (i < lp.num_variables() - 1 ? ", " : "");
+        }
+        std::cout << "]" << std::endl;
+        std::cout << "Total iterations: " << iter << std::endl;
+    }
+
+    return Solution{solution, obj_value, false, false, iter, "Optimal"};
+}
+
+// ==================== STEP 1: DUAL VARIABLES (equation 5.2) ====================
+Eigen::VectorXd SimplexSolver::step1_compute_dual_vars(const Eigen::VectorXd& c_B, const Eigen::MatrixXd& B_inv) {
+    // Mathematical derivation:
+    //   Textbook: y_row = c_B_row · B⁻¹        (row vectors)
+    //   In code (column vectors):
+    //        y_col = (c_B_row · B⁻¹)^T
+    //              = (B⁻¹)^T · c_B_col
+    //              = B_inv.transpose() * c_B
+    return B_inv.transpose() * c_B;
+}
+
+// ==================== STEP 2: REDUCED COSTS (equations 5.3-5.5) ====================
+Eigen::VectorXd SimplexSolver::step2_compute_reduced_costs(const Eigen::VectorXd& c, const Eigen::VectorXd& y,
+                                                           const Eigen::MatrixXd& A) {
+    // d = c - Aᵀ · y  (equation 5.5)
+    // Size check:
+    //   A: m × n  →  Aᵀ: n × m
+    //   y: m × 1
+    //   Aᵀ·y: n × 1
+    //   c: n × 1  →  d: n × 1 (compatible for subtraction)
+    return c - A.transpose() * y;
+}
+
+// ==================== STEP 3: OPTIMALITY CHECK (condition 4.20) ====================
+std::pair<bool, int> SimplexSolver::step3_check_optimality(const Eigen::VectorXd& d, const std::vector<int>& basis,
+                                                           int n_vars) {
+    bool optimal = true;
+    int entering = -1;
+    double min_d = 0.0;
+
+    for (int j = 0; j < n_vars; ++j) {
+        if (std::find(basis.begin(), basis.end(), j) != basis.end())
+            continue;
+
+        if (d(j) < -TOL) {
+            optimal = false;
+            if (d(j) < min_d) {
+                min_d = d(j);
+                entering = j;
             }
         }
+    }
 
-        if (entering == -1) {
-            // Оптимум
-            SimplexInternalResult res;
-            res.feasible = true;
-            res.basis = basis;
-            res.x_b.resize(m);
-            for (int i = 0; i < m; ++i)
-                res.x_b[i] = x_B(i);
-            res.objective_value = y.dot(b);
-            return res;
-        }
+    return {optimal, entering};
+}
 
-        // 6. Направление u = B^{-1} * A_entering
-        Eigen::VectorXd u = B_inv * A.col(entering);
+// ==================== STEP 4: DESCENT DIRECTION (before equation 5.7) ====================
+Eigen::VectorXd SimplexSolver::step4_compute_direction(const Eigen::MatrixXd& B_inv, const Eigen::VectorXd& a_j) {
+    // u = B⁻¹ · a_j
+    return B_inv * a_j;
+}
 
-        // 7. Проверка неограниченности
-        bool unbounded = true;
-        for (int i = 0; i < m; ++i) {
-            if (u(i) > EPS) {
-                unbounded = false;
-                break;
+// ==================== STEP 5: UNBOUNDEDNESS CHECK ====================
+bool SimplexSolver::step5_check_unboundedness(const Eigen::VectorXd& u) {
+    for (int i = 0; i < u.size(); ++i) {
+        if (u(i) > TOL)
+            return false;
+    }
+    return true;
+}
+
+// ==================== STEP 6: LEAVING VARIABLE SELECTION (equation 5.6) ====================
+std::pair<int, double> SimplexSolver::step6_select_leaving_variable(const Eigen::VectorXd& x_B,
+                                                                    const Eigen::VectorXd& u) {
+    double theta = std::numeric_limits<double>::max();
+    int leaving_idx = -1;
+
+    for (int i = 0; i < x_B.size(); ++i) {
+        if (u(i) > TOL) {
+            double ratio = x_B(i) / u(i);
+            if (ratio < theta - TOL) {
+                theta = ratio;
+                leaving_idx = i;
             }
         }
-        if (unbounded) {
-            SimplexInternalResult res;
-            res.feasible = true;
-            res.bounded = false;
-            return res;
-        }
+    }
 
-        // 8. Выбор покидающей переменной (правило Бленда)
-        double theta_min = std::numeric_limits<double>::max();
-        int leaving = -1;
-        for (int i = 0; i < m; ++i) {
-            if (u(i) > EPS) {
-                double theta = x_B(i) / u(i);
-                if (theta < theta_min - EPS) {
-                    theta_min = theta;
-                    leaving = i;
-                } else if (std::abs(theta - theta_min) < EPS) {
-                    if (leaving == -1 || i < leaving) {
-                        leaving = i; // правило Бленда
+    return {leaving_idx, theta};
+}
+
+// ==================== STEP 7: SOLUTION UPDATE (equation 5.7) ====================
+Eigen::VectorXd SimplexSolver::step7_update_solution(const Eigen::VectorXd& x_B_old, const Eigen::VectorXd& u,
+                                                     double theta, int leaving_idx) {
+    Eigen::VectorXd x_B_new = x_B_old - theta * u;
+    x_B_new(leaving_idx) = theta; // Entering variable takes value θ at leaving position
+    return x_B_new;
+}
+
+// ==================== STEP 8: INVERSE BASIS UPDATE (equations 5.8-5.10) ====================
+Eigen::MatrixXd SimplexSolver::step8_update_basis_inverse(const Eigen::MatrixXd& B_inv_old, const Eigen::VectorXd& u,
+                                                          int leaving_idx) {
+    int m = B_inv_old.rows();
+    double u_r = u(leaving_idx);
+
+    // Handle near-zero pivot (degenerate case) with numerical safety
+    if (std::abs(u_r) < TOL) {
+        // In true degenerate cycling, this would require anti-cycling rules
+        // For educational purposes, we use a small perturbation
+        u_r = (u_r >= 0) ? TOL : -TOL;
+    }
+
+    // Construct Frobenius matrix F (equation 5.10)
+    Eigen::MatrixXd F = Eigen::MatrixXd::Identity(m, m);
+    for (int i = 0; i < m; ++i) {
+        if (i != leaving_idx) {
+            F(i, leaving_idx) = -u(i) / u_r;
+        } else {
+            F(i, leaving_idx) = 1.0 / u_r;
+        }
+    }
+
+    // Update inverse basis: B⁻¹_new = F · B⁻¹_old (equation 5.8)
+    return F * B_inv_old;
+}
+
+// ==================== AUXILIARY METHODS ====================
+void SimplexSolver::prepare_rhs_nonnegative(Eigen::MatrixXd& A, Eigen::VectorXd& b, const LinearProgram& lp) {
+    int m = lp.num_constraints();
+    int n = lp.num_variables();
+
+    A.resize(m, n);
+    b.resize(m);
+
+    for (int i = 0; i < m; ++i) {
+        b(i) = lp.rhs()[i];
+        if (b(i) < -TOL) {
+            b(i) = -b(i);
+            for (int j = 0; j < n; ++j) {
+                A(i, j) = -lp.constraints()[i][j];
+            }
+        } else {
+            for (int j = 0; j < n; ++j) {
+                A(i, j) = lp.constraints()[i][j];
+            }
+        }
+    }
+}
+
+void SimplexSolver::remove_artificial_vars(SimplexSolver::SimplexState& state, int original_n, bool verbose) {
+    bool changed = true;
+    int attempts = 0;
+
+    while (changed && attempts < MAX_ITERATIONS) {
+        changed = false;
+        attempts++;
+
+        for (int i = 0; i < state.m; ++i) {
+            if (state.basis[i] >= original_n) {
+                int replacement = -1;
+                for (int j = 0; j < original_n; ++j) {
+                    if (std::find(state.basis.begin(), state.basis.end(), j) != state.basis.end())
+                        continue;
+
+                    Eigen::VectorXd a_j = state.A.col(j);
+                    Eigen::VectorXd u = state.B_inv * a_j;
+
+                    if (std::abs(u(i)) > TOL) {
+                        replacement = j;
+                        break;
                     }
+                }
+
+                if (replacement != -1) {
+                    state.basis[i] = replacement;
+                    changed = true;
+
+                    if (verbose) {
+                        std::cout << "Replaced artificial variable x_" << state.basis[i] << " with original variable x_"
+                                  << replacement << std::endl;
+                    }
+                    break;
                 }
             }
         }
-
-        if (leaving == -1) {
-            return SimplexInternalResult{.feasible = false};
-        }
-
-        // 9. Обновляем базис
-        basis[leaving] = entering;
     }
-
-    throw std::runtime_error("Simplex did not converge (cycling despite Blundell).");
 }
 
+void SimplexSolver::print_iteration(int iter, int entering, int leaving_var, int leaving_idx, double theta,
+                                    const std::vector<int>& basis, const Eigen::VectorXd& x_B, double reduced_cost,
+                                    bool degenerate, bool verbose) {
+    if (!verbose)
+        return;
 
-SimplexSolver::Solution SimplexSolver::solve(const LinearProgram& lp) {
-    if (lp.getForm() != LinearProgram::CANONIC) {
-        throw std::runtime_error("Input must be in canonical form.");
+    std::cout << "\n--- Iteration " << iter << " ---" << std::endl;
+    std::cout << "Entering variable: x_" << entering << " (reduced cost = " << reduced_cost << ")" << std::endl;
+    std::cout << "Leaving variable: x_" << leaving_var << " (position " << leaving_idx << ")" << std::endl;
+    std::cout << "Step size \\theta = " << theta << (degenerate ? " [DEGENERATE]" : "") << std::endl;
+    std::cout << "New basis: {";
+    for (size_t i = 0; i < basis.size(); ++i) {
+        std::cout << basis[i] << (i < basis.size() - 1 ? ", " : "");
     }
-
-    const size_t n = lp.num_variables();
-    const size_t m = lp.num_constraints();
-
-    if (m == 0) {
-        Solution sol;
-        sol.feasible = true;
-        sol.x.assign(n, 0.0);
-        sol.objective_value = 0.0;
-        return sol;
+    std::cout << "}" << std::endl;
+    std::cout << "Basic solution x_B = [";
+    for (int i = 0; i < x_B.size(); ++i) {
+        std::cout << std::fixed << std::setprecision(6) << x_B(i) << (i < x_B.size() - 1 ? ", " : "");
     }
-
-    // Копируем данные
-    std::vector<double> c = lp.objective();
-    std::vector<std::vector<double>> A = lp.constraints();
-    std::vector<double> b = lp.rhs();
-
-    // Приводим b >= 0
-    for (size_t i = 0; i < m; ++i) {
-        if (b[i] < 0) {
-            b[i] = -b[i];
-            for (auto& a : A[i])
-                a = -a;
-        }
-    }
-
-    // Проверка ранга
-    if (matrix_rank(A) < m) {
-        throw std::runtime_error("Constraint matrix rank < number of constraints.");
-    }
-
-    // === ШАГ 1: ВСПОМОГАТЕЛЬНАЯ ЗАДАЧА ===
-    const size_t n_aux = n + m;
-    std::vector<size_t> basis(m);
-    std::iota(basis.begin(), basis.end(), n); // w1..wm
-
-    // Целевая функция вспомогательной задачи: min sum(w_i)
-    std::vector<double> c_aux(n_aux, 0.0);
-    for (size_t i = n; i < n_aux; ++i)
-        c_aux[i] = 1.0;
-
-    // Матрица A_aux = [A | I]
-    std::vector<std::vector<double>> A_aux(m, std::vector<double>(n_aux, 0.0));
-    for (size_t i = 0; i < m; ++i) {
-        for (size_t j = 0; j < n; ++j)
-            A_aux[i][j] = A[i][j];
-        A_aux[i][n + i] = 1.0;
-    }
-
-    // Решаем вспомогательную задачу
-    auto aux_sol = solve_simplex(c_aux, A_aux, b, basis, true);
-
-    if (!aux_sol.feasible || aux_sol.objective_value > EPS) {
-        return Solution{}; // несовместна
-    }
-
-    // === ШАГ 2: УДАЛЕНИЕ ИСКУССТВЕННЫХ ПЕРЕМЕННЫХ ИЗ БАЗИСА ===
-    std::vector<size_t> new_basis;
-    std::vector<bool> in_new_basis(n_aux, false);
-
-    // Сначала берём все исходные переменные из базиса
-    for (size_t idx : aux_sol.basis) {
-        if (idx < n) {
-            new_basis.push_back(idx);
-            in_new_basis[idx] = true;
-        }
-    }
-
-    // Добавляем недостающие исходные переменные
-    for (size_t j = 0; j < n && new_basis.size() < m; ++j) {
-        if (!in_new_basis[j]) {
-            new_basis.push_back(j);
-            in_new_basis[j] = true;
-        }
-    }
-
-    if (new_basis.size() != m) {
-        throw std::runtime_error("Failed to construct initial basis without artificial variables.");
-    }
-
-    // === ШАГ 3: ОСНОВНАЯ ЗАДАЧА ===
-    auto main_sol = solve_simplex(c, A, b, new_basis, false);
-
-    if (!main_sol.feasible) {
-        return Solution{};
-    }
-
-    Solution result;
-    result.feasible = true;
-    result.bounded = main_sol.bounded;
-    result.x.assign(n, 0.0);
-    for (size_t i = 0; i < m; ++i) {
-        size_t var = main_sol.basis[i];
-        if (var < n) {
-            result.x[var] = main_sol.x_b[i];
-        }
-    }
-    result.objective_value = 0.0;
-    for (size_t i = 0; i < n; ++i) {
-        result.objective_value += c[i] * result.x[i];
-    }
-    return result;
+    std::cout << "]" << std::endl;
 }
