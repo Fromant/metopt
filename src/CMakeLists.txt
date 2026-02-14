@@ -21,9 +21,11 @@ add_library(lp
         LinearProgram.cpp
         FormConverter.cpp
         DualBuilder.cpp
-        SimplexSolver.cpp
-        EnumSolver.cpp
+        Solvers/SimplexSolver.cpp
+        Solvers/EnumSolver.cpp
 )
+
+target_include_directories(lp PUBLIC src)
 
 target_link_libraries(lp PUBLIC Eigen3::Eigen)
 

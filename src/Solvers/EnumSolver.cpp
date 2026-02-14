@@ -7,8 +7,8 @@
 #include <limits>
 #include <numeric>
 
-#include "FormConverter.hpp"
-#include "lib.hpp"
+#include "../FormConverter.hpp"
+#include "../lib.hpp"
 
 EnumSolver::Solution EnumSolver::create_infeasible_solution(int n) {
     Solution sol;

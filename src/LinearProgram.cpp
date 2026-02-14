@@ -1,4 +1,5 @@
 #include "LinearProgram.hpp"
+
 #include <algorithm>
 #include <fstream>
 #include <iostream>

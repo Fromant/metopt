@@ -1,7 +1,10 @@
 #pragma once
+
 #include <vector>
+#include <Eigen/Dense>
 
 #include "LinearProgram.hpp"
+
 
 // Восстановление решения исходной задачи из канонической формы
 inline std::vector<double> restore_original_solution(const LinearProgram& original_lp,
