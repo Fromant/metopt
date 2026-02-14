@@ -8,6 +8,7 @@
 #include <numeric>
 
 #include "FormConverter.hpp"
+#include "lib.hpp"
 
 EnumSolver::Solution EnumSolver::create_infeasible_solution(int n) {
     Solution sol;
@@ -17,7 +18,7 @@ EnumSolver::Solution EnumSolver::create_infeasible_solution(int n) {
     sol.is_optimal = false;
     sol.is_unbounded = false;
     sol.is_degenerate = false;
-    sol.status_message = "No feasible solution exists (empty feasible region)";
+    sol.status_message = "No feasible solution exists";
     return sol;
 }
 
@@ -56,19 +57,13 @@ std::vector<std::vector<size_t>> EnumSolver::generate_combinations(int n, int k)
     return result;
 }
 
-/// Проверяет базис на допустимость.
-///
-/// Условия допустимости: Ax=B, x>=0
-///
-/// Эта функция проверяет x>=0
-/// @returns Допустим ли базис
+// Проверяет базис на допустимость.
+// x>=0
 bool EnumSolver::is_basis_feasible(const Eigen::VectorXd& xB, double tolerance) {
     return !std::ranges::any_of(xB, [tolerance](const double d) { return d < -tolerance; });
 }
 
-/// Проверяет базис на вырожденность.
-/// Условия вырожденности: хотя бы одна базисная переменная равна нулю
-/// @returns Вырожден ли базис
+// Проверяет базис на вырожденность.
 bool EnumSolver::is_basis_degenerate(const Eigen::VectorXd& xB, double tolerance) {
     return std::ranges::any_of(xB, [tolerance](const double d) { return std::abs(d) < tolerance; });
 }
@@ -80,29 +75,19 @@ void EnumSolver::print_basis_info(const std::vector<size_t>& basis, const Eigen:
 
     // Show detailed info for first 10 solutions or when new best found
     if (solution_index <= 10 || is_new_best) {
-        std::cout << "\n--- Feasible Basic Solution #" << solution_index << " ---" << std::endl;
+        std::cout << "\nFeasible Basic Solution #" << solution_index << std::endl;
 
         // Print basis indices
-        std::cout << "  Basis indices (B): {";
-        for (size_t i = 0; i < basis.size(); ++i) {
-            std::cout << basis[i];
-            if (i < basis.size() - 1)
-                std::cout << ", ";
-        }
-        std::cout << "}" << std::endl;
+        std::cout << "  Basis indices: ";
+        print_vector(basis);
 
         // Print basic variable values
         std::cout << "  Basic variables (x_B): [";
-        for (int i = 0; i < xB.size(); ++i) {
-            std::cout << std::fixed << std::setprecision(6) << xB(i);
-            if (i < xB.size() - 1)
-                std::cout << ", ";
-        }
-        std::cout << "]" << std::endl;
+        std::cout << std::fixed << std::setprecision(6) << xB << "]" << std::endl;
 
         // Highlight degeneracy
         if (degenerate) {
-            std::cout << "  *** DEGENERATE SOLUTION *** (some x_B approx 0)" << std::endl;
+            std::cout << "  DEGENERATE SOLUTION (some x_B approx 0)" << std::endl;
         }
 
         // Print objective value
@@ -122,9 +107,7 @@ void EnumSolver::print_final_summary(const Solution& best, size_t total_bases, i
     if (!verbose)
         return;
 
-    std::cout << "\n" << std::string(70, '=') << std::endl;
     std::cout << " ENUMERATION COMPLETE: FINAL SUMMARY" << std::endl;
-    std::cout << std::string(70, '=') << std::endl;
 
     std::cout << "\nEnumeration statistics:" << std::endl;
     std::cout << "  Total bases examined:       " << total_bases << std::endl;
@@ -172,50 +155,6 @@ void EnumSolver::print_final_summary(const Solution& best, size_t total_bases, i
     }
 
     std::cout << "\nStatus: " << best.status_message << std::endl;
-    std::cout << std::string(70, '=') << std::endl;
-}
-
-// ============================================================================
-// Восстановление решения исходной задачи из канонической формы
-// ============================================================================
-
-std::vector<double> EnumSolver::restore_original_solution(const LinearProgram& original_lp,
-                                                          const std::vector<double>& canonical_solution) {
-    const int n_orig = original_lp.num_variables();
-    std::vector<double> original_solution(n_orig, 0.0);
-
-    // Определяем позиции "минус" частей для свободных переменных
-    // Пример: если свободные переменные имеют индексы [3, 4] в исходной задаче,
-    // то их "минус" части будут находиться по индексам [n_orig + 0, n_orig + 1]
-    std::vector<int> free_neg_indices;
-    for (int i = 0; i < n_orig; ++i) {
-        if (original_lp.var_constraints()[i] == "free") {
-            free_neg_indices.push_back(n_orig + static_cast<int>(free_neg_indices.size()));
-        }
-    }
-
-    // Восстанавливаем значения переменных
-    int free_counter = 0;
-    for (int i = 0; i < n_orig; ++i) {
-        if (original_lp.var_constraints()[i] == "free") {
-            // x_free = x+ - x-
-            double pos_part = (i < static_cast<int>(canonical_solution.size())) ? canonical_solution[i] : 0.0;
-            double neg_part = 0.0;
-
-            if (free_counter < static_cast<int>(free_neg_indices.size()) &&
-                free_neg_indices[free_counter] < static_cast<int>(canonical_solution.size())) {
-                neg_part = canonical_solution[free_neg_indices[free_counter]];
-            }
-
-            original_solution[i] = pos_part - neg_part;
-            free_counter++;
-        } else {
-            // Неотрицательные переменные берём напрямую
-            original_solution[i] = (i < static_cast<int>(canonical_solution.size())) ? canonical_solution[i] : 0.0;
-        }
-    }
-
-    return original_solution;
 }
 
 // ============================================================================
@@ -419,7 +358,6 @@ EnumSolver::Solution EnumSolver::solve(const LinearProgram& lp, bool verbose) {
     // Шаг 3: Перебираем все базисы
     if (verbose) {
         std::cout << "\n[Step 3] Enumerating all basic feasible solutions..." << std::endl;
-        std::cout << std::string(70, '-') << std::endl;
     }
 
     for (size_t idx = 0; idx < total_bases; ++idx) {
@@ -434,8 +372,9 @@ EnumSolver::Solution EnumSolver::solve(const LinearProgram& lp, bool verbose) {
         }
 
         feasible_count++;
-        if (sol.is_degenerate)
+        if (sol.is_degenerate) {
             degenerate_count++;
+        }
 
         // Выводим информацию о допустимом решении
         print_basis_info(bases[idx], Eigen::VectorXd::Map(sol.x.data(), sol.x.size()), sol.objective_value,

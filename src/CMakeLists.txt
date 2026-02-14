@@ -23,7 +23,6 @@ add_library(lp
         DualBuilder.cpp
         SimplexSolver.cpp
         EnumSolver.cpp
-        SimplexSolver2.cpp
 )
 
 target_link_libraries(lp PUBLIC Eigen3::Eigen)

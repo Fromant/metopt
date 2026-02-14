@@ -57,8 +57,6 @@ private:
                                  bool degenerate, int solution_index, bool is_new_best, bool verbose);
     static void print_final_summary(const Solution& best, size_t total_bases, int feasible_count, int degenerate_count,
                                     int singular_count, bool verbose);
-    static std::vector<double> restore_original_solution(const LinearProgram& original_lp,
-                                                         const std::vector<double>& canonical_solution);
     static bool check_optimality(const LinearProgram& canonical, const Eigen::VectorXd& c, const Eigen::MatrixXd& A,
                                  const Eigen::VectorXd& b, const std::vector<size_t>& basis, double tolerance,
                                  bool& is_unbounded);
