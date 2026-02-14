@@ -232,7 +232,6 @@ EnumSolver::Solution EnumSolver::evaluate_basis(const Eigen::VectorXd& c, const 
     if (lu.rank() < m || std::abs(lu.determinant()) < tolerance) {
         Solution sol;
         sol.is_feasible = false;
-        //TODO upd
         sol.status_message = "Singular basis matrix (rank deficient)";
         return sol;
     }
