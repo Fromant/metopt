@@ -1,11 +1,13 @@
 #include <iostream>
 #include <string>
-#include "DualBuilder.hpp"
-#include "EnumSolver.hpp"
-#include "FormConverter.hpp"
-#include "LinearProgram.hpp"
 
-#include "SimplexSolver.hpp"
+#include "src/DualBuilder.hpp"
+#include "src/EnumSolver.hpp"
+#include "src/FormConverter.hpp"
+#include "src/LinearProgram.hpp"
+
+#include "src/SimplexSolver.hpp"
+#include "src/SimplexSolver2.hpp"
 
 void print_solution(const std::optional<SimplexSolver::Solution>& res_opt) {
     if (!res_opt) {
@@ -97,6 +99,37 @@ void print_enum_solution(const EnumSolver::Solution& res) {
     print_status();
 }
 
+void print_v2_solution(const std::optional<SimplexSolver2::Solution>& res_opt) {
+    if (!res_opt) {
+        std::cout << "Simplex solver 2 failed" << std::endl;
+        return;
+    }
+    const auto& res = res_opt.value();
+    const auto print_status = [&res]() {
+        if (!res.status.empty()) {
+            std::cout << "Status: " << res.status;
+        }
+        std::cout << std::endl;
+    };
+
+    const auto print_vector = [](const Eigen::VectorXd& t) {
+        std::cout << '(';
+        if (t.size()) {
+            for (int i = 0; i < t.size() - 1; i++) {
+                std::cout << t[i] << ", ";
+            }
+            std::cout << t[t.size() - 1];
+        }
+        std::cout << ')' << std::endl;
+    };
+
+    std::cout << "Simplex solver 2 solution:" << std::endl;
+    std::cout << "\tObjective value: " << res.objective_value << std::endl;
+    std::cout << "\tx: ";
+    print_vector(res.x);
+    print_status();
+}
+
 int main(int argc, char* argv[]) {
     std::cout << std::fixed << std::setprecision(2);
 
@@ -115,32 +148,24 @@ int main(int argc, char* argv[]) {
 
     original.print("Input problem:");
 
-    // Convert to general form (formula 4.1) - this is the canonical "general form"
-    LinearProgram general = FormConverter::to_general_form(original);
-    general.print("GENERAL FORM (formula 4.1)");
-    LinearProgram dual_general = DualBuilder::build_dual(general);
-    dual_general.print("DUAL PROBLEM FOR GENERAL FORM");
+    const auto print_forms = [&original]() {
+        LinearProgram general = FormConverter::to_general_form(original);
+        general.print("GENERAL FORM (formula 4.1)");
+        LinearProgram dual_general = DualBuilder::build_dual(general);
+        dual_general.print("DUAL PROBLEM FOR GENERAL FORM");
 
-    // Convert to symmetric form (formula 4.2)
-    LinearProgram symmetric = FormConverter::to_symmetric_form(original);
-    symmetric.print("SYMMETRIC FORM (formula 4.2)");
-    LinearProgram dual_symmetric = DualBuilder::build_dual(symmetric);
-    dual_symmetric.print("DUAL PROBLEM FOR SYMMETRIC FORM");
+        LinearProgram symmetric = FormConverter::to_symmetric_form(original);
+        symmetric.print("SYMMETRIC FORM (formula 4.2)");
+        LinearProgram dual_symmetric = DualBuilder::build_dual(symmetric);
+        dual_symmetric.print("DUAL PROBLEM FOR SYMMETRIC FORM");
 
-    // Convert to canonical form (formula 4.3)
-    LinearProgram canonical = FormConverter::to_canonical_form(original);
-    canonical.print("CANONICAL FORM (formula 4.3)");
-    LinearProgram dual_canonical = DualBuilder::build_dual(canonical);
-    dual_canonical.print("DUAL PROBLEM FOR CANONICAL FORM");
+        LinearProgram canonical = FormConverter::to_canonical_form(original);
+        canonical.print("CANONICAL FORM (formula 4.3)");
+        LinearProgram dual_canonical = DualBuilder::build_dual(canonical);
+        dual_canonical.print("DUAL PROBLEM FOR CANONICAL FORM");
+    };
 
-    // Пример задачи: минимизировать x1 + x2 при условии x1 + x2 = 1, x1,x2 >= 0
-    LinearProgram lp(true, // минимизация
-                     {1.0, 1.0}, // целевая функция
-                     {{1.0, 1.0}}, // матрица ограничений
-                     {"="}, // типы ограничений
-                     {1.0}, // правая часть
-                     {">=0", ">=0"} // ограничения на переменные
-    );
+    // print_forms();
 
     {
         const auto r = SimplexSolver::solve(lp, false);
@@ -159,6 +184,8 @@ int main(int argc, char* argv[]) {
         print_solution(r);
         const auto r1 = EnumSolver::solve(original, false);
         print_enum_solution(r1);
+        const auto r2 = SimplexSolver2::solve(original, false);
+        print_v2_solution(r2);
     }
     {
         const auto dual = DualBuilder::build_dual(original);
@@ -166,6 +193,8 @@ int main(int argc, char* argv[]) {
         print_solution(r);
         const auto r1 = EnumSolver::solve(dual, false);
         print_enum_solution(r1);
+        const auto r2 = SimplexSolver2::solve(dual, false);
+        print_v2_solution(r2);
     }
 
     return 0;

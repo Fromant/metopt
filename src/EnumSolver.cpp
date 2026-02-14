@@ -252,7 +252,7 @@ bool EnumSolver::check_optimality(const LinearProgram& canonical, const Eigen::V
     // Проверяем приведённые стоимости для всех небазисных переменных
     for (int j = 0; j < n; ++j) {
         // Пропускаем базисные переменные
-        if (std::find(basis.begin(), basis.end(), j) != basis.end()) {
+        if (std::ranges::find(basis, j) != basis.end()) {
             continue;
         }
 

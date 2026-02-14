@@ -1,8 +1,9 @@
 cmake_minimum_required(VERSION 3.31)
-project(lp_main)
+project(lp)
 
 set(CMAKE_CXX_STANDARD 20)
 include(FetchContent)
+
 FetchContent_Declare(
         Eigen3
         URL https://gitlab.com/libeigen/eigen/-/archive/5.0.1/eigen-5.0.1.tar
@@ -14,10 +15,16 @@ set(EIGEN_BUILD_TESTING OFF CACHE INTERNAL "")
 set(EIGEN_BUILD_DOC OFF CACHE INTERNAL "")
 set(EIGEN_BUILD_PKGCONFIG OFF CACHE INTERNAL "")
 
-add_executable(lp_main main.cpp)
+FetchContent_MakeAvailable(Eigen3)
 
-add_subdirectory(src)
-target_link_libraries(lp_main lp)
-target_include_directories(lp_main PRIVATE src/)
+add_library(lp
+        LinearProgram.cpp
+        FormConverter.cpp
+        DualBuilder.cpp
+        SimplexSolver.cpp
+        EnumSolver.cpp
+        SimplexSolver2.cpp
+)
 
-add_subdirectory(tests)
+target_link_libraries(lp PUBLIC Eigen3::Eigen)
+

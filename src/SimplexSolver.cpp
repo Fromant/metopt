@@ -61,8 +61,10 @@ std::optional<SimplexSolver::Solution> SimplexSolver::solve(const LinearProgram&
 
     // PHASE I: Find feasible solution using artificial basis
     auto state_opt = phase1(canonical, verbose);
-    if (!state_opt)
+    if (!state_opt) {
         return std::nullopt;
+    }
+
     auto state = *state_opt;
 
     // Check feasibility (Theorem 4.1)
