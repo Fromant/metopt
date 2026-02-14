@@ -60,7 +60,7 @@ std::vector<std::vector<size_t>> EnumSolver::generate_combinations(int n, int k)
 // Проверяет базис на допустимость.
 // x>=0
 bool EnumSolver::is_basis_feasible(const Eigen::VectorXd& xB, double tolerance) {
-    return !std::ranges::any_of(xB, [tolerance](const double d) { return d < -tolerance; });
+    return std::ranges::all_of(xB, [tolerance](const double d) { return d >= -tolerance; });
 }
 
 // Проверяет базис на вырожденность.
@@ -82,8 +82,7 @@ void EnumSolver::print_basis_info(const std::vector<size_t>& basis, const Eigen:
         print_vector(basis);
 
         // Print basic variable values
-        std::cout << "  Basic variables (x_B): [";
-        std::cout << std::fixed << std::setprecision(6) << xB << "]" << std::endl;
+        std::cout << "  Basic variables (x_B): [" << xB << "]" << std::endl;
 
         // Highlight degeneracy
         if (degenerate) {
@@ -91,7 +90,7 @@ void EnumSolver::print_basis_info(const std::vector<size_t>& basis, const Eigen:
         }
 
         // Print objective value
-        std::cout << "  Objective value: " << std::fixed << std::setprecision(6) << obj_value << std::endl;
+        std::cout << "  Objective value: " << obj_value << std::endl;
 
         // Highlight new best solution
         if (is_new_best) {
@@ -104,8 +103,9 @@ void EnumSolver::print_basis_info(const std::vector<size_t>& basis, const Eigen:
 
 void EnumSolver::print_final_summary(const Solution& best, size_t total_bases, int feasible_count, int degenerate_count,
                                      int singular_count, bool verbose) {
-    if (!verbose)
+    if (!verbose) {
         return;
+    }
 
     std::cout << " ENUMERATION COMPLETE: FINAL SUMMARY" << std::endl;
 
@@ -122,23 +122,13 @@ void EnumSolver::print_final_summary(const Solution& best, size_t total_bases, i
     }
 
     std::cout << "\nOptimal solution found:" << std::endl;
-    std::cout << "  Objective value: " << std::fixed << std::setprecision(6) << best.objective_value << std::endl;
+    std::cout << "  Objective value: " << best.objective_value << std::endl;
 
-    std::cout << "  Solution vector (original variables): [";
-    for (size_t i = 0; i < best.x.size(); ++i) {
-        std::cout << std::fixed << std::setprecision(4) << best.x[i];
-        if (i < best.x.size() - 1)
-            std::cout << ", ";
-    }
-    std::cout << "]" << std::endl;
+    std::cout << "  Solution vector (original variables): ";
+    print_vector(best.x);
 
-    std::cout << "  Basis indices in canonical form: {";
-    for (size_t i = 0; i < best.basis.size(); ++i) {
-        std::cout << best.basis[i];
-        if (i < best.basis.size() - 1)
-            std::cout << ", ";
-    }
-    std::cout << "}" << std::endl;
+    std::cout << "  Basis indices: ";
+    print_vector(best.basis);
 
     if (best.is_unbounded) {
         std::cout << "\n  *** WARNING: PROBLEM IS UNBOUNDED ***" << std::endl;
@@ -146,22 +136,18 @@ void EnumSolver::print_final_summary(const Solution& best, size_t total_bases, i
     } else if (best.is_optimal) {
         std::cout << "\n  *** SOLUTION IS OPTIMAL ***" << std::endl;
         std::cout << "      All reduced costs are non-negative (minimization problem)." << std::endl;
-    } else {
-        std::cout << "\n  *** WARNING: SOLUTION MAY NOT BE OPTIMAL ***" << std::endl;
-        std::cout << "      Some reduced costs are negative. This may indicate:" << std::endl;
-        std::cout << "        - Numerical issues during enumeration" << std::endl;
-        std::cout << "        - Problem has no optimal solution (unbounded)" << std::endl;
-        std::cout << "        - Enumeration missed optimal basis due to singularity tolerance" << std::endl;
+    }
+
+    if (best.is_degenerate) {
+        std::cout << "\n  *** NOTE: SOLUTION IS DEGENERATE ***" << std::endl;
+        std::cout << "      At least one basic variable is approximately zero." << std::endl;
     }
 
     std::cout << "\nStatus: " << best.status_message << std::endl;
 }
 
-// ============================================================================
 // Проверка оптимальности через приведённые стоимости
-// ============================================================================
-bool EnumSolver::check_optimality(const LinearProgram& canonical, const Eigen::VectorXd& c, const Eigen::MatrixXd& A,
-                                  const Eigen::VectorXd& b, const std::vector<size_t>& basis, double tolerance,
+bool EnumSolver::check_optimality(const Eigen::VectorXd& c, const Eigen::MatrixXd& A, const std::vector<size_t>& basis,
                                   bool& is_unbounded) {
     is_unbounded = false;
     const int m = static_cast<int>(basis.size());
@@ -179,9 +165,10 @@ bool EnumSolver::check_optimality(const LinearProgram& canonical, const Eigen::V
     }
 
     // Вычисляем обратную матрицу базиса
-    Eigen::FullPivLU<Eigen::MatrixXd> lu(B);
-    if (lu.rank() < m)
+    const Eigen::FullPivLU<Eigen::MatrixXd> lu(B);
+    if (lu.rank() < m) {
         return false; // Вырожденный базис
+    }
 
     Eigen::MatrixXd B_inv = lu.inverse();
 
@@ -199,14 +186,14 @@ bool EnumSolver::check_optimality(const LinearProgram& canonical, const Eigen::V
         double reduced_cost = c(j) - y.dot(A.col(j));
 
         // Для задачи минимизации оптимальность достигается при d_j >= 0
-        if (reduced_cost < -tolerance) {
+        if (reduced_cost < -EPS) {
             // Проверяем на неограниченность: можно ли увеличивать x_j бесконечно?
             Eigen::VectorXd direction = B_inv * A.col(j);
 
             // Если все компоненты направления <= 0, то можем увеличивать x_j до бесконечности
             bool can_increase_indefinitely = true;
             for (int i = 0; i < m; ++i) {
-                if (direction(i) > tolerance) {
+                if (direction(i) > EPS) {
                     can_increase_indefinitely = false;
                     break;
                 }
@@ -225,13 +212,10 @@ bool EnumSolver::check_optimality(const LinearProgram& canonical, const Eigen::V
     return true; // Все приведённые стоимости неотрицательны -> оптимальное решение
 }
 
-// ============================================================================
 // Оценка конкретного базиса
-// ============================================================================
-
-EnumSolver::Solution EnumSolver::evaluate_basis(const LinearProgram& canonical, const Eigen::VectorXd& c,
-                                                const Eigen::MatrixXd& A, const Eigen::VectorXd& b,
-                                                const std::vector<size_t>& basis, double tolerance) {
+EnumSolver::Solution EnumSolver::evaluate_basis(const Eigen::VectorXd& c, const Eigen::MatrixXd& A,
+                                                const Eigen::VectorXd& b, const std::vector<size_t>& basis,
+                                                double tolerance) {
     const int m = static_cast<int>(basis.size());
     const int n = static_cast<int>(c.size());
 
@@ -248,6 +232,7 @@ EnumSolver::Solution EnumSolver::evaluate_basis(const LinearProgram& canonical, 
     if (lu.rank() < m || std::abs(lu.determinant()) < tolerance) {
         Solution sol;
         sol.is_feasible = false;
+        //TODO upd
         sol.status_message = "Singular basis matrix (rank deficient)";
         return sol;
     }
@@ -296,10 +281,6 @@ EnumSolver::Solution EnumSolver::evaluate_basis(const LinearProgram& canonical, 
     return sol;
 }
 
-// ============================================================================
-// Основной метод решения
-// ============================================================================
-
 EnumSolver::Solution EnumSolver::solve(const LinearProgram& lp, bool verbose) {
     if (verbose) {
         lp.print("Enumeration solver. Original problem:");
@@ -315,35 +296,12 @@ EnumSolver::Solution EnumSolver::solve(const LinearProgram& lp, bool verbose) {
     int n = static_cast<int>(canonical.num_variables());
     int m = static_cast<int>(canonical.num_constraints());
 
-    // Преобразуем данные в структуры Eigen
-    Eigen::VectorXd c(n);
-    for (int i = 0; i < n; ++i)
-        c(i) = canonical.objective()[i];
 
-    Eigen::MatrixXd A(m, n);
-    for (int i = 0; i < m; ++i) {
-        for (int j = 0; j < n; ++j) {
-            A(i, j) = canonical.constraints()[i][j];
-        }
-    }
+    Eigen::VectorXd c = std_to_eigen(canonical.objective());
+    Eigen::MatrixXd A = std_to_eigen(canonical.constraints());
+    Eigen::VectorXd b = std_to_eigen(canonical.rhs());
 
-    Eigen::VectorXd b(m);
-    for (int i = 0; i < m; ++i)
-        b(i) = canonical.rhs()[i];
-
-    // Обеспечиваем неотрицательность правой части (требование канонической формы)
-    for (int i = 0; i < m; ++i) {
-        if (b(i) < -TOLERANCE) {
-            if (verbose) {
-                std::cout << "\nWARNING: Negative RHS component b[" << i << "] = " << b(i)
-                          << ". Multiplying constraint by -1." << std::endl;
-            }
-            A.row(i) = -A.row(i);
-            b(i) = -b(i);
-        }
-    }
-
-    // Шаг 2: Генерируем все возможные базисы
+    // Генерируем все возможные базисы
     auto bases = generate_combinations(n, m);
     size_t total_bases = bases.size();
 
@@ -355,14 +313,14 @@ EnumSolver::Solution EnumSolver::solve(const LinearProgram& lp, bool verbose) {
     int degenerate_count = 0;
     int singular_count = 0;
 
-    // Шаг 3: Перебираем все базисы
+    // Перебираем все базисы
     if (verbose) {
-        std::cout << "\n[Step 3] Enumerating all basic feasible solutions..." << std::endl;
+        std::cout << "\nEnumerating all basic feasible solutions..." << std::endl;
     }
 
     for (size_t idx = 0; idx < total_bases; ++idx) {
         // Оцениваем текущий базис
-        Solution sol = evaluate_basis(canonical, c, A, b, bases[idx], TOLERANCE);
+        Solution sol = evaluate_basis(c, A, b, bases[idx], EPS);
 
         if (!sol.is_feasible) {
             if (sol.status_message.find("Singular") != std::string::npos) {
@@ -376,19 +334,17 @@ EnumSolver::Solution EnumSolver::solve(const LinearProgram& lp, bool verbose) {
             degenerate_count++;
         }
 
-        // Выводим информацию о допустимом решении
         print_basis_info(bases[idx], Eigen::VectorXd::Map(sol.x.data(), sol.x.size()), sol.objective_value,
-                         sol.is_degenerate, feasible_count, sol.objective_value < best.objective_value - TOLERANCE,
+                         sol.is_degenerate, feasible_count, sol.objective_value < best.objective_value - EPS,
                          verbose && feasible_count <= 10);
 
-        // Обновляем лучшее решение
-        if (sol.objective_value < best.objective_value - TOLERANCE) {
+        if (sol.objective_value < best.objective_value - EPS) {
             best = sol;
             best.is_feasible = true;
         }
     }
 
-    // Шаг 4: Анализ результатов
+    // проверка допустимости
     if (!best.is_feasible) {
         best = create_infeasible_solution(lp.num_variables());
         print_final_summary(best, total_bases, feasible_count, degenerate_count, singular_count, verbose);
@@ -397,7 +353,7 @@ EnumSolver::Solution EnumSolver::solve(const LinearProgram& lp, bool verbose) {
 
     // Проверка оптимальности через приведённые стоимости
     bool is_unbounded = false;
-    best.is_optimal = check_optimality(canonical, c, A, b, best.basis, TOLERANCE, is_unbounded);
+    best.is_optimal = check_optimality(c, A, best.basis, is_unbounded);
     best.is_unbounded = is_unbounded;
 
     if (is_unbounded) {

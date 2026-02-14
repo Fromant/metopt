@@ -1,8 +1,5 @@
 #include "SimplexSolver.hpp"
 
-#include "FormConverter.hpp"
-#include "LinearProgram.hpp"
-
 #include <algorithm>
 #include <cmath>
 #include <iomanip>
@@ -12,6 +9,7 @@
 #include <optional>
 #include <string>
 
+#include "FormConverter.hpp"
 #include "lib.hpp"
 
 SimplexSolver::Solution SimplexSolver::create_infeasible_solution(int n) {
@@ -27,10 +25,13 @@ SimplexSolver::Solution SimplexSolver::create_infeasible_solution(int n) {
     return sol;
 }
 
+// Проверяет базис на допустимость.
+// x>=0
 bool SimplexSolver::is_basis_feasible(const Eigen::VectorXd& xB, double tolerance) {
-    return !std::ranges::any_of(xB, [tolerance](double d) { return d < -tolerance; });
+    return std::ranges::all_of(xB, [tolerance](double d) { return d >= -tolerance; });
 }
 
+// Проверяет базис на вырожденность.
 bool SimplexSolver::is_basis_degenerate(const Eigen::VectorXd& xB, double tolerance) {
     return std::ranges::any_of(xB, [tolerance](double d) { return std::abs(d) < tolerance; });
 }
@@ -59,25 +60,16 @@ SimplexSolver::Solution SimplexSolver::solve(const LinearProgram& lp, bool verbo
     }
 
     // Преобразуем данные в структуры Eigen
-    Eigen::VectorXd b(m);
-    for (size_t i = 0; i < m; ++i)
-        b(i) = canonical.rhs()[i];
-
-    Eigen::MatrixXd A(m, n);
-    for (size_t i = 0; i < m; ++i)
-        for (size_t j = 0; j < n; ++j)
-            A(i, j) = canonical.constraints()[i][j];
-
-    Eigen::VectorXd c_orig(n);
-    for (size_t i = 0; i < n; ++i)
-        c_orig(i) = canonical.objective()[i];
+    Eigen::VectorXd c = std_to_eigen(canonical.objective());
+    Eigen::MatrixXd A = std_to_eigen(canonical.constraints());
+    Eigen::VectorXd b = std_to_eigen(canonical.rhs());
 
     if (verbose) {
         std::cout << "Constraints (m): " << m << ", Original variables (n): " << n << std::endl;
         std::cout << "b = " << b.transpose() << std::endl;
     }
 
-    // ===== PHASE I: Поиск допустимого базиса с помощью искусственных переменных =====
+    // PHASE I: Поиск допустимого базиса с помощью искусственных переменных
     if (verbose) {
         std::cout << " PHASE I: Artificial Basis Method" << std::endl;
     }
@@ -91,6 +83,7 @@ SimplexSolver::Solution SimplexSolver::solve(const LinearProgram& lp, bool verbo
     std::fill(c_phase1.begin() + n, c_phase1.end(), 1.0); // Минимизируем сумму искусственных
 
     // Начальный базис = искусственные переменные
+    // (0,..., 0, n, n+1, ..., m-n-1)
     std::vector<size_t> basis(m);
     std::iota(basis.begin(), basis.end(), n);
 
@@ -98,9 +91,7 @@ SimplexSolver::Solution SimplexSolver::solve(const LinearProgram& lp, bool verbo
     Eigen::MatrixXd B_inv = Eigen::MatrixXd::Identity(m, m);
     Eigen::VectorXd x_B = b;
 
-    auto phase1_result = run_simplex_phase(A_phase1, b, c_phase1, std::move(basis), B_inv, x_B,
-                                           n, // Только оригинальные переменные могут войти в базис при очистке
-                                           "Phase I", verbose);
+    auto phase1_result = run_simplex_phase(A_phase1, b, c_phase1, std::move(basis), B_inv, x_B, n, "Phase I", verbose);
 
     int phase1_iterations = phase1_result ? phase1_result->iterations : 0;
 
@@ -123,18 +114,13 @@ SimplexSolver::Solution SimplexSolver::solve(const LinearProgram& lp, bool verbo
     if (verbose) {
         std::cout << " PHASE I COMPLETE" << std::endl;
         std::cout << "Feasible basis found. Phase I objective: " << phase1_result->objective_value << std::endl;
-        std::cout << "Basis indices: {";
-        for (size_t i = 0; i < basis.size(); ++i) {
-            std::cout << basis[i];
-            if (i < basis.size() - 1)
-                std::cout << ", ";
-        }
-        std::cout << "}" << std::endl;
+        std::cout << "Basis indices: ";
+        print_vector(basis);
     }
 
-    // ===== ОЧИСТКА: Удаление искусственных переменных из базиса =====
+    // Удаление искусственных переменных из базиса
     if (verbose) {
-        std::cout << " CLEANUP: Removing Artificial Variables from Basis" << std::endl;
+        std::cout << " Removing Artificial Variables from Basis" << std::endl;
     }
 
     bool cleanup_success = cleanup_artificial_basis(A, B_inv, basis, x_B, n, verbose);
@@ -150,13 +136,8 @@ SimplexSolver::Solution SimplexSolver::solve(const LinearProgram& lp, bool verbo
 
     if (verbose) {
         std::cout << " CLEANUP COMPLETE" << std::endl;
-        std::cout << "Basis for Phase II: {";
-        for (size_t i = 0; i < basis.size(); ++i) {
-            std::cout << basis[i];
-            if (i < basis.size() - 1)
-                std::cout << ", ";
-        }
-        std::cout << "}" << std::endl;
+        std::cout << "Basis for Phase II: ";
+        print_vector(basis);
     }
 
     // ===== PHASE II: Оптимизация исходной целевой функции =====
@@ -164,9 +145,8 @@ SimplexSolver::Solution SimplexSolver::solve(const LinearProgram& lp, bool verbo
         std::cout << " PHASE II: Optimization" << std::endl;
     }
 
-    auto phase2_result = run_simplex_phase(A, b, canonical.objective(), std::move(basis), B_inv, x_B,
-                                           n, // Все оригинальные переменные участвуют
-                                           "Phase II", verbose);
+    auto phase2_result =
+        run_simplex_phase(A, b, canonical.objective(), std::move(basis), B_inv, x_B, n, "Phase II", verbose);
 
     int phase2_iterations = phase2_result ? phase2_result->iterations : 0;
 
@@ -178,6 +158,16 @@ SimplexSolver::Solution SimplexSolver::solve(const LinearProgram& lp, bool verbo
             print_final_summary(sol, phase1_iterations, phase2_iterations, verbose);
         }
         return sol;
+    }
+
+    bool is_unbounded_flag = false;
+    // на всякий случай перепроверяем оптимальность
+    bool is_optimal_flag = check_optimality(A, c, phase2_result->basis, phase2_result->B_inv, is_unbounded_flag);
+
+    if (verbose && phase2_result->optimal != is_optimal_flag) {
+        std::cout << "\n[WARNING] Mismatch between iteration termination and explicit optimality check:"
+                  << "\n  Iteration termination: " << (phase2_result->optimal ? "optimal" : "not optimal")
+                  << "\n  Explicit check: " << (is_optimal_flag ? "optimal" : "not optimal") << std::endl;
     }
 
     // Формируем полное решение в канонической форме
@@ -203,7 +193,7 @@ SimplexSolver::Solution SimplexSolver::solve(const LinearProgram& lp, bool verbo
     sol.objective_value = final_objective;
     sol.basis = std::move(phase2_result->basis);
     sol.is_feasible = true;
-    sol.is_optimal = phase2_result->optimal;
+    sol.is_optimal = is_optimal_flag;
     sol.is_unbounded = phase2_result->unbounded;
     sol.is_degenerate = is_basis_degenerate(phase2_result->x_B, EPS);
     sol.status_message = phase2_result->unbounded
@@ -217,8 +207,8 @@ SimplexSolver::Solution SimplexSolver::solve(const LinearProgram& lp, bool verbo
 // Единая функция симплекс-итераций
 std::optional<SimplexSolver::PhaseResult>
 SimplexSolver::run_simplex_phase(const Eigen::MatrixXd& A, const Eigen::VectorXd& b, const std::vector<double>& c,
-                                  std::vector<size_t> basis, Eigen::MatrixXd B_inv, Eigen::VectorXd x_B,
-                                  size_t n_active_vars, const std::string& phase_name, bool verbose) {
+                                 std::vector<size_t> basis, Eigen::MatrixXd B_inv, Eigen::VectorXd x_B,
+                                 size_t n_active_vars, const std::string& phase_name, bool verbose) {
 
     const size_t m = A.rows();
     int iter = 0;
@@ -240,18 +230,16 @@ SimplexSolver::run_simplex_phase(const Eigen::MatrixXd& A, const Eigen::VectorXd
         bool optimal = true;
 
         for (size_t j = 0; j < n_active_vars; ++j) {
-            if (std::ranges::find(basis, j) != basis.end())
+            if (std::ranges::find(basis, j) != basis.end()) {
                 continue;
+            }
 
-            double dj = c[j];
-            for (size_t i = 0; i < m; ++i)
-                dj -= y[i] * A(i, j);
-            d[j] = dj;
+            d[j] = c[j] - y * A.col(j);
 
-            if (dj < -EPS) {
+            if (d[j] < -EPS) {
                 optimal = false;
-                if (entering == n_active_vars || dj < min_d) {
-                    min_d = dj;
+                if (entering == n_active_vars || d[j] < min_d) {
+                    min_d = d[j];
                     entering = j;
                 }
             }
@@ -358,8 +346,8 @@ SimplexSolver::run_simplex_phase(const Eigen::MatrixXd& A, const Eigen::VectorXd
 
 // Удаление искусственных переменных из базиса
 bool SimplexSolver::cleanup_artificial_basis(const Eigen::MatrixXd& A_orig, Eigen::MatrixXd& B_inv,
-                                              std::vector<size_t>& basis, Eigen::VectorXd& x_B, size_t n_orig,
-                                              bool verbose) {
+                                             std::vector<size_t>& basis, Eigen::VectorXd& x_B, size_t n_orig,
+                                             bool verbose) {
 
     const size_t m = A_orig.rows();
     bool basis_changed;
@@ -435,11 +423,63 @@ bool SimplexSolver::cleanup_artificial_basis(const Eigen::MatrixXd& A_orig, Eige
     return true;
 }
 
+bool SimplexSolver::check_optimality(const Eigen::MatrixXd& A, const Eigen::VectorXd& c,
+                                     const std::vector<size_t>& basis, const Eigen::MatrixXd& B_inv,
+                                     bool& is_unbounded) {
+    is_unbounded = false;
+    const size_t m = basis.size();
+    const size_t n = c.size();
+
+    // Шаг 1: Вычисляем двойственные переменные y = c_B^T * B^{-1} (формула 5.2)
+    Eigen::VectorXd c_B(m);
+    for (size_t i = 0; i < m; ++i) {
+        c_B[i] = c[basis[i]];
+    }
+    Eigen::RowVectorXd y = c_B.transpose() * B_inv;
+
+    // Шаг 2: Проверяем приведённые стоимости для всех небазисных переменных (формулы 5.4-5.5)
+    for (size_t j = 0; j < n; ++j) {
+        // Пропускаем базисные переменные
+        if (std::ranges::find(basis, j) != basis.end())
+            continue;
+
+        // Приведённая стоимость: d_j = c_j - y * A_j (формула 5.3)
+        double reduced_cost = c(j) - y.dot(A.col(j));
+
+        // Для задачи минимизации оптимальность достигается при d_j >= 0 (после формулы 5.5)
+        if (reduced_cost < -EPS) {
+            // Проверяем на неограниченность: можно ли увеличивать x_j бесконечно?
+            // Направление: u = B^{-1} * A_j (формула 5.9)
+            Eigen::VectorXd direction = B_inv * A.col(j);
+
+            // Если все компоненты направления <= 0, то можем увеличивать x_j до бесконечности
+            bool can_increase_indefinitely = true;
+            for (size_t i = 0; i < m; ++i) {
+                if (direction[i] > EPS) {
+                    can_increase_indefinitely = false;
+                    break;
+                }
+            }
+
+            if (can_increase_indefinitely) {
+                is_unbounded = true;
+                return false; // Неограниченная задача
+            }
+
+            // Иначе решение не оптимально (есть улучшающее направление)
+            return false;
+        }
+    }
+
+    return true; // Все приведённые стоимости неотрицательны -> оптимальное решение
+}
+
+
 // Вывод информации о смене базиса
 void SimplexSolver::print_basis_change(const std::string& phase_name, int iteration, size_t entering_var,
-                                        size_t leaving_var, size_t leaving_pos, double reduced_cost, double theta,
-                                        bool degenerate, const std::vector<size_t>& new_basis,
-                                        const Eigen::VectorXd& new_xB, double objective_value, bool verbose) {
+                                       size_t leaving_var, size_t leaving_pos, double reduced_cost, double theta,
+                                       bool degenerate, const std::vector<size_t>& new_basis,
+                                       const Eigen::VectorXd& new_xB, double objective_value, bool verbose) {
 
     if (!verbose) {
         return;
@@ -450,8 +490,8 @@ void SimplexSolver::print_basis_change(const std::string& phase_name, int iterat
         std::cout << "\n[" << phase_name << " Iter " << iteration << (degenerate ? " (DEGENERATE)" : "")
                   << "] Basis change:" << std::endl;
 
-        std::cout << "  Entering variable: x_" << entering_var << " (reduced cost = " << std::fixed
-                  << std::setprecision(6) << reduced_cost << ")" << std::endl;
+        std::cout << "  Entering variable: x_" << entering_var << " (reduced cost = " << reduced_cost << ")"
+                  << std::endl;
         std::cout << "  Leaving variable:  x_" << leaving_var << " (position " << leaving_pos << " in basis)"
                   << std::endl;
         std::cout << "  Step length theta: " << theta << (degenerate ? " (degenerate pivot)" : "") << std::endl;
@@ -460,10 +500,10 @@ void SimplexSolver::print_basis_change(const std::string& phase_name, int iterat
         print_vector(new_basis);
 
         std::cout << "  Basic variables: (";
-        std::cout << std::fixed << std::setprecision(6) << new_xB << std::endl;
+        std::cout << new_xB << std::endl;
         std::cout << ")" << std::endl;
 
-        std::cout << "  Objective value: " << std::fixed << std::setprecision(6) << objective_value << std::endl;
+        std::cout << "  Objective value: " << objective_value << std::endl;
     } else if (iteration == 11) {
         std::cout << "\n  ... (showing only first 10 iterations in detail) ..." << std::endl;
     }
@@ -471,7 +511,7 @@ void SimplexSolver::print_basis_change(const std::string& phase_name, int iterat
 
 // Вывод итоговой сводки
 void SimplexSolver::print_final_summary(const Solution& sol, int phase1_iterations, int phase2_iterations,
-                                         bool verbose) {
+                                        bool verbose) {
     if (!verbose) {
         return;
     }
@@ -488,7 +528,7 @@ void SimplexSolver::print_final_summary(const Solution& sol, int phase1_iteratio
     }
 
     std::cout << "\nOptimal solution found:" << std::endl;
-    std::cout << "  Objective value: " << std::fixed << std::setprecision(6) << sol.objective_value << std::endl;
+    std::cout << "  Objective value: " << sol.objective_value << std::endl;
 
     std::cout << "  Solution vector (original variables): ";
     print_vector(sol.x);
