@@ -1,7 +1,9 @@
 #pragma once
 
-#include <vector>
 #include <Eigen/Dense>
+#include <cassert>
+#include <random>
+#include <vector>
 
 #include "LinearProgram.hpp"
 
@@ -96,4 +98,19 @@ inline Eigen::MatrixXd std_to_eigen(const std::vector<std::vector<double>>& m) {
         }
     }
     return result;
+}
+
+inline void print_val_with_err(const double val1, const double val2) {
+    double err = std::abs(val1 - val2) / 2;
+    double avg = (val1 + val2) / 2;
+
+    const double exponent = std::floor(std::log10(err));
+    // Разряд последней значащей цифры погрешности: -exponent
+    const auto precision = std::clamp(-exponent, 4.0, 10.0);
+    const double factor = std::pow(10.0, -precision - 1); // Сохраняем 2 значащие цифры
+    err = std::round(err / factor) * factor;
+    avg = std::round(avg / factor) * factor;
+    std::cout << std::fixed << std::setprecision(precision) << avg << " +- " << err << std::endl;
+    const double rel_err = (err / std::abs(avg)) * 100.0;
+    std::cout << "Real error: " << std::fixed << std::setprecision(2) << rel_err << " %" << std::endl;
 }

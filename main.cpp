@@ -112,37 +112,36 @@ int main(int argc, char* argv[]) {
 
     // print_forms();
 
-    const auto print_obj_GOST = [](const double val1, const double val2) {
-        double err = std::abs(val1 - val2) / 2;
-        double avg = (val1 + val2) / 2;
-
-        const double exponent = std::floor(std::log10(err));
-        // Разряд последней значащей цифры погрешности: -exponent
-        const auto precision = std::clamp(-exponent, 0.0, 10.0);
-        const double factor = std::pow(10.0, -precision - 1); // Сохраняем 2 значащие цифры
-        err = std::round(err / factor) * factor;
-        avg = std::round(avg / factor) * factor;
-        std::cout << std::fixed << std::setprecision(precision) << avg << " +- " << err << std::endl;
-        const double rel_err = (err / std::abs(avg)) * 100.0;
-        std::cout << "Real error: " << std::fixed << std::setprecision(2) << rel_err << " %" << std::endl;
-    };
-
-    const auto solve_simplex = [&original, print_obj_GOST]() {
+    const auto solve_simplex = [&original]() {
         const auto r = SimplexSolver::solve(original, false);
         const auto dual = DualBuilder::build_dual(original);
         const auto r_dual = SimplexSolver::solve(dual, false);
         print_simplex_solution(r);
-        print_obj_GOST(r.objective_value, r_dual.objective_value);
+        print_simplex_solution(r_dual);
+        print_val_with_err(r.objective_value, r_dual.objective_value);
     };
     solve_simplex();
 
-    const auto solve_enum = [&original, print_obj_GOST]() {
+    const auto solve_enum = [&original]() {
         const auto r = EnumSolver::solve(original, false);
         const auto dual = DualBuilder::build_dual(original);
         const auto r_dual = EnumSolver::solve(dual, false);
-        print_obj_GOST(r.objective_value, r_dual.objective_value);
+        print_enum_solution(r);
+        print_enum_solution(r_dual);
+
+        const auto y = std_to_eigen(r_dual.x);
+        const auto x = std_to_eigen(r.x);
+        const auto A = std_to_eigen(original.constraints());
+        const auto c = std_to_eigen(original.objective());
+
+        // Проверка оптимальности из пункта 5 отчета
+        std::cout << c.transpose() << '-' << y.transpose() * A << std::endl;
+        std::cout << c.transpose() - y.transpose() * A << std::endl;
+        std::cout << (c.transpose() - y.transpose() * A) << '*' << x << std::endl;
+        std::cout << (c.transpose() - y.transpose() * A) * x << std::endl;
+
+        print_val_with_err(r.objective_value, r_dual.objective_value);
     };
     solve_enum();
-
     return 0;
 }
