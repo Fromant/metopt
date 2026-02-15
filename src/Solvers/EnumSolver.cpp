@@ -59,13 +59,13 @@ std::vector<std::vector<size_t>> EnumSolver::generate_combinations(int n, int k)
 
 // Проверяет базис на допустимость.
 // x>=0
-bool EnumSolver::is_basis_feasible(const Eigen::VectorXd& xB, double tolerance) {
-    return std::ranges::all_of(xB, [tolerance](const double d) { return d >= -tolerance; });
+bool EnumSolver::is_basis_feasible(const Eigen::VectorXd& xB) {
+    return std::ranges::all_of(xB, [](const double d) { return d >= -EPS; });
 }
 
 // Проверяет базис на вырожденность.
-bool EnumSolver::is_basis_degenerate(const Eigen::VectorXd& xB, double tolerance) {
-    return std::ranges::any_of(xB, [tolerance](const double d) { return std::abs(d) < tolerance; });
+bool EnumSolver::is_basis_degenerate(const Eigen::VectorXd& xB) {
+    return std::ranges::any_of(xB, [](const double d) { return std::abs(d) < EPS; });
 }
 
 void EnumSolver::print_basis_info(const std::vector<size_t>& basis, const Eigen::VectorXd& xB, double obj_value,
@@ -214,8 +214,7 @@ bool EnumSolver::check_optimality(const Eigen::VectorXd& c, const Eigen::MatrixX
 
 // Оценка конкретного базиса
 EnumSolver::Solution EnumSolver::evaluate_basis(const Eigen::VectorXd& c, const Eigen::MatrixXd& A,
-                                                const Eigen::VectorXd& b, const std::vector<size_t>& basis,
-                                                double tolerance) {
+                                                const Eigen::VectorXd& b, const std::vector<size_t>& basis) {
     const int m = static_cast<int>(basis.size());
     const int n = static_cast<int>(c.size());
 
@@ -229,7 +228,7 @@ EnumSolver::Solution EnumSolver::evaluate_basis(const Eigen::VectorXd& c, const 
 
     // Проверяем невырожденность базиса через ранг матрицы
     Eigen::FullPivLU<Eigen::MatrixXd> lu(B);
-    if (lu.rank() < m || std::abs(lu.determinant()) < tolerance) {
+    if (lu.rank() < m || std::abs(lu.determinant()) < EPS) {
         Solution sol;
         sol.is_feasible = false;
         sol.status_message = "Singular basis matrix (rank deficient)";
@@ -248,7 +247,7 @@ EnumSolver::Solution EnumSolver::evaluate_basis(const Eigen::VectorXd& c, const 
     }
 
     // Проверяем допустимость базисного решения
-    if (!is_basis_feasible(xB, tolerance)) {
+    if (!is_basis_feasible(xB)) {
         Solution sol;
         sol.is_feasible = false;
         sol.status_message = "Infeasible basis (negative basic variables)";
@@ -274,7 +273,7 @@ EnumSolver::Solution EnumSolver::evaluate_basis(const Eigen::VectorXd& c, const 
     sol.objective_value = obj_value;
     sol.basis = basis;
     sol.is_feasible = true;
-    sol.is_degenerate = is_basis_degenerate(xB, tolerance);
+    sol.is_degenerate = is_basis_degenerate(xB);
     sol.status_message = sol.is_degenerate ? "Degenerate feasible solution" : "Feasible solution";
 
     return sol;
@@ -294,7 +293,6 @@ EnumSolver::Solution EnumSolver::solve(const LinearProgram& lp, bool verbose) {
     // Извлекаем размерности
     int n = static_cast<int>(canonical.num_variables());
     int m = static_cast<int>(canonical.num_constraints());
-
 
     Eigen::VectorXd c = std_to_eigen(canonical.objective());
     Eigen::MatrixXd A = std_to_eigen(canonical.constraints());
@@ -317,9 +315,9 @@ EnumSolver::Solution EnumSolver::solve(const LinearProgram& lp, bool verbose) {
         std::cout << "\nEnumerating all basic feasible solutions..." << std::endl;
     }
 
-    for (size_t idx = 0; idx < total_bases; ++idx) {
-        // Оцениваем текущий базис
-        Solution sol = evaluate_basis(c, A, b, bases[idx], EPS);
+    for (const auto& basis : bases) {
+        // Оценить базис
+        Solution sol = evaluate_basis(c, A, b, basis);
 
         if (!sol.is_feasible) {
             if (sol.status_message.find("Singular") != std::string::npos) {
@@ -333,11 +331,12 @@ EnumSolver::Solution EnumSolver::solve(const LinearProgram& lp, bool verbose) {
             degenerate_count++;
         }
 
-        print_basis_info(bases[idx], Eigen::VectorXd::Map(sol.x.data(), sol.x.size()), sol.objective_value,
-                         sol.is_degenerate, feasible_count, sol.objective_value < best.objective_value - EPS,
-                         verbose && feasible_count <= 10);
+        const bool is_new_best = sol.objective_value < best.objective_value - EPS;
 
-        if (sol.objective_value < best.objective_value - EPS) {
+        print_basis_info(basis, Eigen::VectorXd::Map(sol.x.data(), sol.x.size()), sol.objective_value,
+                         sol.is_degenerate, feasible_count, is_new_best, verbose && feasible_count <= 10);
+
+        if (is_new_best) {
             best = sol;
             best.is_feasible = true;
         }
