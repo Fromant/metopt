@@ -5,7 +5,7 @@
 #include <random>
 #include <vector>
 
-#include "LinearProgram.hpp"
+#include "linear/LinearProgram.hpp"
 
 
 // Восстановление решения исходной задачи из канонической формы

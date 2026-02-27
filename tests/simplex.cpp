@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
-#include "../src/Solvers/SimplexSolver.hpp"
-#include "DualBuilder.hpp"
+#include "linear/Solvers/SimplexSolver.hpp"
+#include "linear/DualBuilder.hpp"
 
 const std::string files_folder = "../../tasks/";
 constexpr auto EPS = 1e-9;

@@ -18,14 +18,20 @@ set(EIGEN_BUILD_PKGCONFIG OFF CACHE INTERNAL "")
 FetchContent_MakeAvailable(Eigen3)
 
 add_library(lp
-        LinearProgram.cpp
-        FormConverter.cpp
-        DualBuilder.cpp
-        Solvers/SimplexSolver.cpp
-        Solvers/EnumSolver.cpp
+        linear/LinearProgram.cpp
+        linear/FormConverter.cpp
+        linear/DualBuilder.cpp
+        linear/Solvers/SimplexSolver.cpp
+        linear/Solvers/EnumSolver.cpp
+        transport/TransportProblem.cpp
+        transport/TransportProblem.hpp
+        transport/NorthwestCorner.cpp
+        transport/NorthwestCorner.hpp
+        transport/MODISolver.cpp
+        transport/MODISolver.hpp
 )
 
-target_include_directories(lp PUBLIC src)
+target_include_directories(lp PUBLIC ./)
 
 target_link_libraries(lp PUBLIC Eigen3::Eigen)
 

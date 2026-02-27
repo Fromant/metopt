@@ -9,8 +9,8 @@
 #include <optional>
 #include <string>
 
-#include "../FormConverter.hpp"
-#include "../lib.hpp"
+#include "lib.hpp"
+#include "linear/FormConverter.hpp"
 
 SimplexSolver::Solution SimplexSolver::create_infeasible_solution(int n) {
     Solution sol;

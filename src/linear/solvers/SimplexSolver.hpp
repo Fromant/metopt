@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "../LinearProgram.hpp"
+#include "linear/LinearProgram.hpp"
 
 class SimplexSolver {
 public:

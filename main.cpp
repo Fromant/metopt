@@ -2,12 +2,11 @@
 #include <string>
 
 #include "lib.hpp"
-#include "src/DualBuilder.hpp"
-#include "src/FormConverter.hpp"
-#include "src/LinearProgram.hpp"
-#include "src/Solvers/EnumSolver.hpp"
 
-#include "src/Solvers/SimplexSolver.hpp"
+#include "linear/DualBuilder.hpp"
+#include "linear/FormConverter.hpp"
+#include "linear/solvers/EnumSolver.hpp"
+#include "linear/solvers/SimplexSolver.hpp"
 
 void print_simplex_solution(const SimplexSolver::Solution& res) {
     const auto print_status = [&res]() {
@@ -112,6 +111,11 @@ int main(int argc, char* argv[]) {
 
     // print_forms();
 
+    LinearProgram canonical = FormConverter::to_canonical_form(original);
+    LinearProgram dual_canonical = FormConverter::to_canonical_form(DualBuilder::build_dual(original));
+    canonical.print("HUY");
+    dual_canonical.print("HUY2");
+
     const auto solve_simplex = [&original]() {
         const auto r = SimplexSolver::solve(original, false);
         const auto dual = DualBuilder::build_dual(original);
@@ -129,16 +133,17 @@ int main(int argc, char* argv[]) {
         print_enum_solution(r);
         print_enum_solution(r_dual);
 
-        const auto y = std_to_eigen(r_dual.x);
-        const auto x = std_to_eigen(r.x);
-        const auto A = std_to_eigen(original.constraints());
-        const auto c = std_to_eigen(original.objective());
-
         // Проверка оптимальности из пункта 5 отчета
-        std::cout << c.transpose() << '-' << y.transpose() * A << std::endl;
-        std::cout << c.transpose() - y.transpose() * A << std::endl;
-        std::cout << (c.transpose() - y.transpose() * A) << '*' << x << std::endl;
-        std::cout << (c.transpose() - y.transpose() * A) * x << std::endl;
+
+        // const auto y = std_to_eigen(r_dual.x);
+        // const auto x = std_to_eigen(r.x);
+        // const auto A = std_to_eigen(original.constraints());
+        // const auto c = std_to_eigen(original.objective());
+
+        // std::cout << c.transpose() << '-' << y.transpose() * A << std::endl;
+        // std::cout << c.transpose() - y.transpose() * A << std::endl;
+        // std::cout << (c.transpose() - y.transpose() * A) << '*' << x << std::endl;
+        // std::cout << (c.transpose() - y.transpose() * A) * x << std::endl;
 
         print_val_with_err(r.objective_value, r_dual.objective_value);
     };

@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
-#include "Solvers/EnumSolver.hpp"
-#include "DualBuilder.hpp"
+#include "linear/DualBuilder.hpp"
+#include "linear/Solvers/EnumSolver.hpp"
 
 const std::string files_folder = "../../tasks/";
 constexpr auto EPS = 1e-9;

@@ -236,7 +236,7 @@ LinearProgram LinearProgram::read_from_console() {
     std::cout << "Available values: >=0, <=0, free" << std::endl;
     std::vector<std::string> var_constraints(n);
     for (int i = 0; i < n; ++i) {
-        std::cout << "x" << (i + 1) << " = ";
+        std::cout << "x" << (i + 1) << " ";
         std::cin >> var_constraints[i];
         if (!is_valid_variable_constraint(var_constraints[i])) {
             std::cerr << "Error: invalid constraint '" << var_constraints[i] << "' for variable x" << (i + 1)

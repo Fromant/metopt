@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "../LinearProgram.hpp"
+#include "linear/LinearProgram.hpp"
 
 class EnumSolver {
 public:
