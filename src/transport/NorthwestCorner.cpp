@@ -43,6 +43,11 @@ NorthwestCorner::Result NorthwestCorner::solve(const TransportProblem& problem, 
 
     // Основной цикл
     while (i < m && j < n) {
+        // Пропускаем уже исчерпанные строки/столбцы
+        while (i < m && supply[i] < EPS) i++;
+        while (j < n && demand[j] < EPS) j++;
+        if (i >= m || j >= n) break;
+
         // Выделяем минимум из доступного
         double allocation = std::min(supply[i], demand[j]);
         result.plan[i][j] = allocation;
@@ -58,13 +63,9 @@ NorthwestCorner::Result NorthwestCorner::solve(const TransportProblem& problem, 
 
         // Переходим к следующей клетке
         if (supply[i] < EPS && demand[j] < EPS) {
-            // Оба исчерпаны (вырожденный случай)
-            // Добавляем базисную переменную с нулевым значением
-            if (j < n - 1) {
-                j++;
-            } else if (i < m - 1) {
-                i++;
-            }
+            // Оба исчерпаны - переходим к следующей клетке по диагонали
+            i++;
+            j++;
         } else if (supply[i] < EPS) {
             // Поставщик исчерпан - идём вниз
             i++;
