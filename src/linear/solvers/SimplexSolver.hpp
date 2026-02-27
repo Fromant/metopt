@@ -27,6 +27,24 @@ public:
     /// @return Решение задачи
     static Solution solve(const LinearProgram& lp, bool verbose = false);
 
+    /**
+     * Решить задачу ЛП с использованием начального базиса
+     * @param lp Задача линейного программирования
+     * @param initialBasis Индексы начальных базисных переменных
+     * @param verbose Включить подробный вывод
+     * @return Решение
+     */
+    static Solution solveWithInitialBasis(const LinearProgram& lp, const std::vector<size_t>& initialBasis,
+                                   bool verbose = false);
+
+    /**
+     * Проверить, образует ли набор столбцов базис полного ранга
+     * @param A Матрица ограничений
+     * @param basis Индексы базисных столбцов
+     * @return true если базис полного ранга
+     */
+    static bool checkBasisRank(const Eigen::MatrixXd& A, const std::vector<size_t>& basis);
+
 private:
     static constexpr double EPS = 1e-9;
     static constexpr int MAX_ITERATIONS = 1000;

@@ -27,12 +27,12 @@ SimplexSolver::Solution SimplexSolver::create_infeasible_solution(int n) {
 
 // Проверяет базис на допустимость.
 // x>=0
-bool SimplexSolver::is_basis_feasible(const Eigen::VectorXd& xB, double tolerance) {
+bool SimplexSolver::is_basis_feasible(const Eigen::VectorXd& xB, double tolerance = EPS) {
     return std::ranges::all_of(xB, [tolerance](double d) { return d >= -tolerance; });
 }
 
 // Проверяет базис на вырожденность.
-bool SimplexSolver::is_basis_degenerate(const Eigen::VectorXd& xB, double tolerance) {
+bool SimplexSolver::is_basis_degenerate(const Eigen::VectorXd& xB, double tolerance = EPS) {
     return std::ranges::any_of(xB, [tolerance](double d) { return std::abs(d) < tolerance; });
 }
 
@@ -601,6 +601,174 @@ SimplexSolver::Solution SimplexSolver::handle_no_variables(size_t m, const std::
     if (verbose) {
         std::cout << "Result: " << (feasible ? "FEASIBLE" : "INFEASIBLE") << std::endl;
         std::cout << "Status: " << sol.status_message << std::endl;
+    }
+
+    return sol;
+}
+
+bool SimplexSolver::checkBasisRank(const Eigen::MatrixXd& A,
+                                   const std::vector<size_t>& basis) {
+    if (basis.empty()) {
+        return false;
+    }
+
+    size_t m = A.rows();
+    if (basis.size() != m) {
+        return false;
+    }
+
+    // Формируем базисную матрицу
+    Eigen::MatrixXd B(A.rows(), basis.size());
+    for (size_t i = 0; i < basis.size(); ++i) {
+        if (basis[i] >= A.cols()) {
+            return false;
+        }
+        B.col(i) = A.col(basis[i]);
+    }
+
+    // Вычисляем ранг через полное QR разложение
+    Eigen::FullPivHouseholderQR<Eigen::MatrixXd> qr(B);
+    int rank = qr.rank();
+
+    return rank == static_cast<int>(m);
+}
+
+SimplexSolver::Solution SimplexSolver::solveWithInitialBasis(
+    const LinearProgram& lp,
+    const std::vector<size_t>& initialBasis,
+    bool verbose) {
+
+    if (verbose) {
+        std::cout << "\n=== SIMPLEX WITH INITIAL BASIS ===" << std::endl;
+        std::cout << "Using provided initial basis" << std::endl;
+    }
+
+    // Проверки
+    if (initialBasis.empty()) {
+        if (verbose) {
+            std::cerr << "Error: Initial basis is empty" << std::endl;
+        }
+        return create_infeasible_solution(lp.num_variables());
+    }
+
+    // Преобразуем в каноническую форму
+    LinearProgram canonical = FormConverter::to_canonical_form(lp);
+
+    const size_t m = canonical.num_constraints();
+    const size_t n = canonical.num_variables();
+
+    if (verbose) {
+        std::cout << "Problem dimensions: " << m << " constraints, "
+                 << n << " variables" << std::endl;
+        std::cout << "Initial basis size: " << initialBasis.size() << std::endl;
+    }
+
+    // Проверка размера базиса
+    if (initialBasis.size() != m) {
+        std::string msg = "Initial basis size (" + std::to_string(initialBasis.size()) +
+                         ") must equal number of constraints (" + std::to_string(m) + ")";
+        if (verbose) {
+            std::cerr << "Error: " << msg << std::endl;
+        }
+        return create_infeasible_solution(n);
+    }
+
+    // Преобразуем данные
+    Eigen::VectorXd c = std_to_eigen(canonical.objective());
+    Eigen::MatrixXd A = std_to_eigen(canonical.constraints());
+    Eigen::VectorXd b = std_to_eigen(canonical.rhs());
+
+    // Проверка ранга базиса
+    if (!checkBasisRank(A, initialBasis)) {
+        if (verbose) {
+            std::cerr << "Error: Initial basis does not have full rank" << std::endl;
+        }
+        return create_infeasible_solution(n);
+    }
+
+    if (verbose) {
+        std::cout << "Initial basis has full rank - OK" << std::endl;
+        std::cout << "Initial basis indices: ";
+        print_vector(initialBasis);
+    }
+
+    // Формируем начальную обратную базисную матрицу
+    Eigen::MatrixXd B(m, m);
+    for (size_t i = 0; i < m; ++i) {
+        B.col(i) = A.col(initialBasis[i]);
+    }
+
+    Eigen::MatrixXd B_inv = B.inverse();
+    Eigen::VectorXd x_B = B_inv * b;
+
+    // Проверка допустимости начального базиса
+    if (!is_basis_feasible(x_B)) {
+        if (verbose) {
+            std::cerr << "Warning: Initial basis is not feasible (some x_B < 0)" << std::endl;
+            std::cerr << "x_B = " << x_B.transpose() << std::endl;
+            std::cout << "Attempting to proceed anyway..." << std::endl;
+        }
+    }
+
+    if (is_basis_degenerate(x_B)) {
+        if (verbose) {
+            std::cout << "Note: Initial basis is degenerate" << std::endl;
+        }
+    }
+
+    // Запускаем Phase II сразу (пропускаем Phase I)
+    if (verbose) {
+        std::cout << "\nStarting Phase II optimization..." << std::endl;
+    }
+
+    auto phase2_result = run_simplex_phase(
+        A, b, canonical.objective(),
+        initialBasis, B_inv, x_B,
+        n, "Phase II (from initial basis)", verbose);
+
+    int phase2_iterations = phase2_result ? phase2_result->iterations : 0;
+
+    if (!phase2_result) {
+        Solution sol = create_infeasible_solution(n);
+        sol.status_message = "Phase II failed to converge";
+        return sol;
+    }
+
+    // Формируем полное решение
+    std::vector<double> x_canonical(n, 0.0);
+    for (size_t i = 0; i < m; ++i) {
+        if (phase2_result->basis[i] < n) {
+            x_canonical[phase2_result->basis[i]] = phase2_result->x_B[i];
+        }
+    }
+
+    // Восстанавливаем решение исходной задачи
+    std::vector<double> x_original = restore_original_solution(lp, x_canonical);
+
+    // Корректируем знак для максимизации
+    double final_objective = phase2_result->objective_value;
+    if (!lp.is_minimization()) {
+        final_objective = -final_objective;
+    }
+
+    // Формируем результат
+    Solution sol;
+    sol.x = std::move(x_original);
+    sol.objective_value = final_objective;
+    sol.basis = std::move(phase2_result->basis);
+    sol.is_feasible = true;
+    sol.is_optimal = phase2_result->optimal;
+    sol.is_unbounded = phase2_result->unbounded;
+    sol.is_degenerate = is_basis_degenerate(phase2_result->x_B, EPS);
+    sol.status_message = phase2_result->unbounded
+        ? "Unbounded problem"
+        : (phase2_result->optimal ? "Optimal solution found" : "Feasible solution found");
+
+    if (verbose) {
+        std::cout << "\n=== SIMPLEX WITH INITIAL BASIS COMPLETE ===" << std::endl;
+        std::cout << "Iterations: " << phase2_iterations << std::endl;
+        std::cout << "Status: " << sol.status_message << std::endl;
+        std::cout << "Objective value: " << sol.objective_value << std::endl;
     }
 
     return sol;
