@@ -1,19 +1,18 @@
 #pragma once
 
-#include <vector>
 #include <string>
-#include <fstream>
+#include <vector>
 
 #include "../linear/LinearProgram.hpp"
 
 class TransportProblem {
 public:
-    std::vector<double> supply;      // Запасы поставщиков (a_i)
-    std::vector<double> demand;      // Потребности потребителей (b_j)
-    std::vector<std::vector<double>> cost;  // Матрица стоимостей (c_ij)
+    std::vector<double> supply; // Запасы поставщиков (a_i)
+    std::vector<double> demand; // Потребности потребителей (b_j)
+    std::vector<std::vector<double>> cost; // Матрица стоимостей (c_ij)
 
-    size_t m;  // Количество поставщиков
-    size_t n;  // Количество потребителей
+    size_t m; // Количество поставщиков
+    size_t n; // Количество потребителей
 
     TransportProblem() : m(0), n(0) {}
 
@@ -43,4 +42,10 @@ public:
 
     // Подсчёт общей стоимости
     double calculateCost(const std::vector<std::vector<double>>& plan) const;
+
+    /**
+     * Восстановить матрицу плана из вектора решения (формат: x[i*n + j])
+     */
+    static std::vector<std::vector<double>> restorePlanFromVector(const std::vector<double>& x_vector, size_t m,
+                                                                  size_t n);
 };

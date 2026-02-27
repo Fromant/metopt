@@ -1,9 +1,10 @@
 #pragma once
 
-#include <Eigen/Dense>
 #include <cassert>
 #include <random>
 #include <vector>
+
+#include <Eigen/Dense>
 
 #include "linear/LinearProgram.hpp"
 

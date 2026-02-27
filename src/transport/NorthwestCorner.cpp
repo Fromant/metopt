@@ -1,7 +1,10 @@
 #include "NorthwestCorner.hpp"
+
 #include <algorithm>
 #include <iomanip>
 #include <iostream>
+
+constexpr static double EPS = 1e-9;
 
 NorthwestCorner::Result NorthwestCorner::solve(const TransportProblem& problem, bool verbose) {
     Result result;
@@ -43,7 +46,7 @@ NorthwestCorner::Result NorthwestCorner::solve(const TransportProblem& problem, 
         // Выделяем минимум из доступного
         double allocation = std::min(supply[i], demand[j]);
         result.plan[i][j] = allocation;
-        result.basis.push_back({i, j});
+        result.basis.emplace_back(i, j);
 
         if (verbose) {
             printStep(step, i, j, allocation, supply[i] - allocation, demand[j] - allocation, result.plan);
@@ -54,7 +57,7 @@ NorthwestCorner::Result NorthwestCorner::solve(const TransportProblem& problem, 
         demand[j] -= allocation;
 
         // Переходим к следующей клетке
-        if (supply[i] < 1e-9 && demand[j] < 1e-9) {
+        if (supply[i] < EPS && demand[j] < EPS) {
             // Оба исчерпаны (вырожденный случай)
             // Добавляем базисную переменную с нулевым значением
             if (j < n - 1) {
@@ -62,7 +65,7 @@ NorthwestCorner::Result NorthwestCorner::solve(const TransportProblem& problem, 
             } else if (i < m - 1) {
                 i++;
             }
-        } else if (supply[i] < 1e-9) {
+        } else if (supply[i] < EPS) {
             // Поставщик исчерпан - идём вниз
             i++;
         } else {
@@ -83,7 +86,6 @@ NorthwestCorner::Result NorthwestCorner::solve(const TransportProblem& problem, 
         }
 
         // Добавляем недостающие базисные клетки с epsilon
-        const double epsilon = 1e-9;
         for (size_t ii = 0; ii < m && result.basis.size() < expectedBasis; ++ii) {
             for (size_t jj = 0; jj < n && result.basis.size() < expectedBasis; ++jj) {
                 bool alreadyBasis = false;
@@ -95,10 +97,10 @@ NorthwestCorner::Result NorthwestCorner::solve(const TransportProblem& problem, 
                 }
 
                 if (!alreadyBasis) {
-                    result.plan[ii][jj] = epsilon;
-                    result.basis.push_back({ii, jj});
+                    result.plan[ii][jj] = EPS;
+                    result.basis.emplace_back(ii, jj);
                     if (verbose) {
-                        std::cout << "Added degenerate basis cell (" << ii << ", " << jj << ") with value " << epsilon
+                        std::cout << "Added degenerate basis cell (" << ii << ", " << jj << ") with value " << EPS
                                   << std::endl;
                     }
                     break;
@@ -128,11 +130,11 @@ void NorthwestCorner::printStep(size_t step, size_t i, size_t j, double value, d
     std::cout << "Step " << step << ": Allocate " << std::fixed << std::setprecision(2) << value << " to cell (A"
               << (i + 1) << ", B" << (j + 1) << ")" << std::endl;
 
-    if (remainingSupply < 1e-9 && remainingDemand < 1e-9) {
+    if (remainingSupply < EPS && remainingDemand < EPS) {
         std::cout << "  -> Both supply and demand exhausted (degenerate case)" << std::endl;
-    } else if (remainingSupply < 1e-9) {
+    } else if (remainingSupply < EPS) {
         std::cout << "  -> Supply exhausted, move down" << std::endl;
-    } else if (remainingDemand < 1e-9) {
+    } else if (remainingDemand < EPS) {
         std::cout << "  -> Demand satisfied, move right" << std::endl;
     }
 }

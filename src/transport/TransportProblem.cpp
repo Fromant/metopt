@@ -1,9 +1,12 @@
 #include "transport/TransportProblem.hpp"
 
 #include <cmath>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <numeric>
+
+constexpr static double EPS = 1e-9;
 
 TransportProblem TransportProblem::fromFile(const std::string& filename) {
     TransportProblem problem;
@@ -114,7 +117,7 @@ bool TransportProblem::validate() const {
     double totalSupply = std::accumulate(supply.begin(), supply.end(), 0.0);
     double totalDemand = std::accumulate(demand.begin(), demand.end(), 0.0);
 
-    if (totalSupply < 1e-9 || totalDemand < 1e-9) {
+    if (totalSupply < EPS || totalDemand < EPS) {
         std::cerr << "Error: Total supply and demand must be positive" << std::endl;
         return false;
     }
@@ -139,15 +142,15 @@ TransportProblem TransportProblem::balance() const {
 
     if (totalSupply > totalDemand) {
         // Добавляем фиктивного потребителя
-        balanced.demand.push_back(totalSupply - totalDemand);
+        balanced.demand.emplace_back(totalSupply - totalDemand);
         for (size_t i = 0; i < balanced.m; ++i) {
-            balanced.cost[i].push_back(0.0);
+            balanced.cost[i].emplace_back(0.0);
         }
         balanced.n++;
     } else {
         // Добавляем фиктивного поставщика
-        balanced.supply.push_back(totalDemand - totalSupply);
-        balanced.cost.push_back(std::vector<double>(balanced.n, 0.0));
+        balanced.supply.emplace_back(totalDemand - totalSupply);
+        balanced.cost.emplace_back(balanced.n, 0.0);
         balanced.m++;
     }
 
@@ -202,13 +205,14 @@ LinearProgram TransportProblem::toLinearProgram() const {
     std::vector<std::string> var_constraints(numVars, ">=0");
 
     // 4. Создаём задачу: минимизация
-    return LinearProgram(true, // minimize = true
-                         objective, // c
-                         constraints, // A
-                         relations, // все "="
-                         rhs, // b
-                         var_constraints // все ">=0"
-    );
+    return {
+        true, // minimize = true
+        objective, // c
+        constraints, // A
+        relations, // все "="
+        rhs, // b
+        var_constraints // все ">=0"
+    };
 }
 
 void TransportProblem::print(const std::string& title) const {
@@ -269,7 +273,7 @@ void TransportProblem::printPlan(const std::vector<std::vector<double>>& plan) {
     for (size_t i = 0; i < m; ++i) {
         std::cout << "A" << (i + 1) << "  ";
         for (size_t j = 0; j < n; ++j) {
-            if (plan[i][j] > 1e-9) {
+            if (plan[i][j] > EPS) {
                 std::cout << std::setw(10) << std::fixed << std::setprecision(2) << plan[i][j];
             } else {
                 std::cout << std::setw(10) << "-";
@@ -287,4 +291,20 @@ double TransportProblem::calculateCost(const std::vector<std::vector<double>>& p
         }
     }
     return total;
+}
+
+std::vector<std::vector<double>> TransportProblem::restorePlanFromVector(const std::vector<double>& x_vector, size_t m,
+                                                                         size_t n) {
+    if (x_vector.size() != m * n) {
+        throw std::runtime_error("Vector size mismatch: expected " + std::to_string(m * n) + ", got " +
+                                 std::to_string(x_vector.size()));
+    }
+
+    std::vector<std::vector<double>> plan(m, std::vector<double>(n, 0.0));
+    for (size_t i = 0; i < m; ++i) {
+        for (size_t j = 0; j < n; ++j) {
+            plan[i][j] = x_vector[i * n + j];
+        }
+    }
+    return plan;
 }

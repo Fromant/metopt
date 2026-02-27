@@ -14,6 +14,7 @@ MODISolver::Result MODISolver::solve(const TransportProblem& problem,
     result.success = false;
     result.iterations = 0;
     result.isOptimal = false;
+    result.totalCost = 0;
 
     // Проверки
     if (!problem.validate()) {
@@ -113,7 +114,7 @@ MODISolver::Result MODISolver::solve(const TransportProblem& problem,
         applyCycle(result.plan, cycle, leavingIndex);
 
         // Обновляем базис
-        result.basis.push_back({enterI, enterJ});
+        result.basis.emplace_back(enterI, enterJ);
         if (leavingIndex < result.basis.size() - 1) {
             result.basis.erase(result.basis.begin() + leavingIndex);
         }
@@ -193,7 +194,7 @@ MODISolver::findEnteringCell(const TransportProblem& problem, const std::vector<
     for (size_t i = 0; i < problem.m; ++i) {
         for (size_t j = 0; j < problem.n; ++j) {
             // Пропускаем базисные клетки
-            if (basisSet.find({i, j}) != basisSet.end()) {
+            if (basisSet.contains({i, j})) {
                 continue;
             }
 
@@ -217,7 +218,7 @@ std::vector<std::pair<size_t, size_t>> MODISolver::findCycle(size_t startI, size
     // и проходить только через базисные клетки (кроме начальной)
 
     std::vector<std::pair<size_t, size_t>> cycle;
-    cycle.push_back({startI, startJ});
+    cycle.emplace_back(startI, startJ);
 
     // Создаём граф смежности для базисных клеток
     std::set<std::pair<size_t, size_t>> basisSet(basis.begin(), basis.end());
@@ -234,11 +235,11 @@ std::vector<std::pair<size_t, size_t>> MODISolver::findCycle(size_t startI, size
                 continue;
 
             auto cell = std::make_pair(i, jj);
-            if (visited.find(cell) != visited.end())
+            if (visited.contains(cell))
                 continue;
 
-            if (basisSet.find(cell) != basisSet.end() || cell == std::make_pair(startI, startJ)) {
-                path.push_back(cell);
+            if (basisSet.contains(cell) || cell == std::make_pair(startI, startJ)) {
+                path.emplace_back(cell);
                 visited.insert(cell);
 
                 if (cell == std::make_pair(startI, startJ) && path.size() > 1) {
@@ -259,11 +260,11 @@ std::vector<std::pair<size_t, size_t>> MODISolver::findCycle(size_t startI, size
                 continue;
 
             auto cell = std::make_pair(ii, j);
-            if (visited.find(cell) != visited.end())
+            if (visited.contains(cell))
                 continue;
 
-            if (basisSet.find(cell) != basisSet.end() || cell == std::make_pair(startI, startJ)) {
-                path.push_back(cell);
+            if (basisSet.contains(cell) || cell == std::make_pair(startI, startJ)) {
+                path.emplace_back(cell);
                 visited.insert(cell);
 
                 if (cell == std::make_pair(startI, startJ) && path.size() > 1) {
@@ -356,7 +357,7 @@ void MODISolver::printDeltas(const TransportProblem& problem, const std::vector<
     for (size_t i = 0; i < problem.m; ++i) {
         std::cout << "A" << (i + 1) << "  ";
         for (size_t j = 0; j < problem.n; ++j) {
-            if (basisSet.find({i, j}) != basisSet.end()) {
+            if (basisSet.contains({i, j})) {
                 std::cout << std::setw(10) << "-";
             } else {
                 double delta = computeDelta(problem, i, j, u, v);
