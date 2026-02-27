@@ -21,8 +21,8 @@ add_library(lp
         linear/LinearProgram.cpp
         linear/FormConverter.cpp
         linear/DualBuilder.cpp
-        linear/Solvers/SimplexSolver.cpp
-        linear/Solvers/EnumSolver.cpp
+        linear/solvers/SimplexSolver.cpp
+        linear/solvers/EnumSolver.cpp
         transport/TransportProblem.cpp
         transport/TransportProblem.hpp
         transport/NorthwestCorner.cpp
