@@ -23,6 +23,30 @@ public:
                        const std::vector<std::pair<size_t, size_t>>& initialBasis,
                        bool verbose = true,
                        int maxIterations = 100);
+
+    // Построение цикла (публичный метод для демонстрации)
+    static std::vector<std::pair<size_t, size_t>> findCycle(
+        size_t startI, size_t startJ,
+        const std::vector<std::pair<size_t, size_t>>& basis);
+
+    // Применение цикла (публичный метод для демонстрации)
+    static void applyCycle(std::vector<std::vector<double>>& plan,
+                          const std::vector<std::pair<size_t, size_t>>& cycle,
+                          size_t& leavingIndex);
+
+    // Вывод цикла в консоль (для демонстрации)
+    static void printCycle(const std::vector<std::pair<size_t, size_t>>& cycle,
+                          const std::vector<std::vector<double>>& plan);
+
+    // Вывод потенциалов в консоль
+    static void printPotentials(const std::vector<double>& u, 
+                               const std::vector<double>& v);
+
+    // Вывод оценок (delta) в консоль
+    static void printDeltas(const TransportProblem& problem,
+                           const std::vector<std::pair<size_t, size_t>>& basis,
+                           const std::vector<double>& u,
+                           const std::vector<double>& v);
     
 private:
     // Вычисление потенциалов
@@ -43,24 +67,4 @@ private:
         const std::vector<std::pair<size_t, size_t>>& basis,
         const std::vector<double>& u,
         const std::vector<double>& v);
-    
-    // Построение цикла
-    static std::vector<std::pair<size_t, size_t>> findCycle(
-        size_t startI, size_t startJ,
-        const std::vector<std::pair<size_t, size_t>>& basis);
-    
-    // Применение цикла
-    static void applyCycle(std::vector<std::vector<double>>& plan,
-                          const std::vector<std::pair<size_t, size_t>>& cycle,
-                          size_t& leavingIndex);
-    
-    // Вспомогательные методы вывода
-    static void printPotentials(const std::vector<double>& u, 
-                               const std::vector<double>& v);
-    static void printDeltas(const TransportProblem& problem,
-                           const std::vector<std::pair<size_t, size_t>>& basis,
-                           const std::vector<double>& u,
-                           const std::vector<double>& v);
-    static void printCycle(const std::vector<std::pair<size_t, size_t>>& cycle,
-                          const std::vector<std::vector<double>>& plan);
 };

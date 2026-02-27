@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <iostream>
 #include <numeric>
+#include <sstream>
 
 constexpr static double EPS = 1e-9;
 
@@ -49,6 +50,17 @@ TransportProblem TransportProblem::fromFile(const std::string& filename) {
         }
     }
 
+    // Чтение штрафов за недопоставку (опционально)
+    // Формат: после матрицы может идти одна строка с n штрафами
+    problem.demandPenalty.resize(problem.n, 0.0);
+    double firstPenalty;
+    if (file >> firstPenalty) {
+        problem.demandPenalty[0] = firstPenalty;
+        for (size_t j = 1; j < problem.n; ++j) {
+            file >> problem.demandPenalty[j];
+        }
+    }
+
     return problem;
 }
 
@@ -88,6 +100,20 @@ TransportProblem TransportProblem::fromConsole() {
         }
     }
 
+    std::cout << "Enter demand penalties (one per consumer, or press Enter for 0): " << std::endl;
+    problem.demandPenalty.resize(problem.n, 0.0);
+    std::string line;
+    std::getline(std::cin, line);
+    std::getline(std::cin, line);
+    if (!line.empty()) {
+        std::istringstream iss(line);
+        for (size_t j = 0; j < problem.n; ++j) {
+            if (!(iss >> problem.demandPenalty[j])) {
+                problem.demandPenalty[j] = 0.0;
+            }
+        }
+    }
+
     return problem;
 }
 
@@ -110,6 +136,18 @@ bool TransportProblem::validate() const {
     for (size_t i = 0; i < m; ++i) {
         if (cost[i].size() != n) {
             std::cerr << "Error: Cost matrix columns mismatch" << std::endl;
+            return false;
+        }
+    }
+
+    if (!demandPenalty.empty() && demandPenalty.size() != n) {
+        std::cerr << "Error: Demand penalty vector size mismatch" << std::endl;
+        return false;
+    }
+    // Also check that penalty doesn't have negative values
+    for (size_t j = 0; j < demandPenalty.size(); ++j) {
+        if (demandPenalty[j] < 0) {
+            std::cerr << "Error: Penalty must be non-negative" << std::endl;
             return false;
         }
     }
@@ -141,16 +179,24 @@ TransportProblem TransportProblem::balance() const {
     double totalDemand = std::accumulate(demand.begin(), demand.end(), 0.0);
 
     if (totalSupply > totalDemand) {
-        // Добавляем фиктивного потребителя
+        // Добавляем фиктивного потребителя (избыток предложения)
         balanced.demand.emplace_back(totalSupply - totalDemand);
         for (size_t i = 0; i < balanced.m; ++i) {
             balanced.cost[i].emplace_back(0.0);
         }
         balanced.n++;
+        // Penalty for new column is 0 (no penalty for excess supply)
     } else {
-        // Добавляем фиктивного поставщика
+        // Добавляем фиктивного поставщика (недопоставка/недополучение)
+        // Стоимость = штраф за недопоставку для каждого потребителя
         balanced.supply.emplace_back(totalDemand - totalSupply);
-        balanced.cost.emplace_back(balanced.n, 0.0);
+        std::vector<double> dummySupplierCost;
+        if (demandPenalty.empty()) {
+            dummySupplierCost = std::vector<double>(balanced.n, 0.0);
+        } else {
+            dummySupplierCost = demandPenalty;
+        }
+        balanced.cost.emplace_back(dummySupplierCost);
         balanced.m++;
     }
 

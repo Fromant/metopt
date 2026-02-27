@@ -10,6 +10,7 @@ public:
     std::vector<double> supply; // Запасы поставщиков (a_i)
     std::vector<double> demand; // Потребности потребителей (b_j)
     std::vector<std::vector<double>> cost; // Матрица стоимостей (c_ij)
+    std::vector<double> demandPenalty; // Штраф за недопоставку для каждого потребителя
 
     size_t m; // Количество поставщиков
     size_t n; // Количество потребителей

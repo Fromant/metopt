@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "transport/TransportProblem.hpp"
+#include "transport/MODISolver.hpp"
 
 constexpr auto EPS = 1e-9;
 
@@ -198,4 +199,78 @@ TEST_F(TransportUnitTest, supply_demand_vectors) {
     EXPECT_EQ(tp.demand.size(), 2u);
     EXPECT_EQ(tp.cost.size(), 3u);
     EXPECT_EQ(tp.cost[0].size(), 2u);
+}
+
+TEST_F(TransportUnitTest, penalty_default_empty) {
+    TransportProblem tp = createSimpleProblem();
+    EXPECT_TRUE(tp.demandPenalty.empty());
+}
+
+TEST_F(TransportUnitTest, penalty_read_from_file) {
+    TransportProblem tp = TransportProblem::fromFile("../../tasks/transport/transport4.txt");
+    EXPECT_EQ(tp.demandPenalty.size(), 3u);
+    EXPECT_NEAR(tp.demandPenalty[0], 10.0, EPS);
+    EXPECT_NEAR(tp.demandPenalty[1], 5.0, EPS);
+    EXPECT_NEAR(tp.demandPenalty[2], 20.0, EPS);
+}
+
+TEST_F(TransportUnitTest, penalty_validate_negative_fails) {
+    TransportProblem tp = createSimpleProblem();
+    tp.demandPenalty = {-1.0, 2.0};
+    EXPECT_FALSE(tp.validate());
+}
+
+TEST_F(TransportUnitTest, balance_with_penalty_uses_penalty) {
+    TransportProblem tp;
+    tp.m = 2;
+    tp.n = 2;
+    tp.supply = {20, 10};
+    tp.demand = {25, 10};
+    tp.cost = {{1, 2}, {3, 4}};
+    tp.demandPenalty = {10, 5};
+    
+    TransportProblem balanced = tp.balance();
+    
+    EXPECT_EQ(balanced.m, 3u);
+    EXPECT_EQ(balanced.n, 2u);
+    EXPECT_EQ(balanced.cost.size(), 3u);
+    EXPECT_EQ(balanced.cost[2].size(), 2u);
+    EXPECT_NEAR(balanced.cost[2][0], 10.0, EPS);
+    EXPECT_NEAR(balanced.cost[2][1], 5.0, EPS);
+}
+
+TEST_F(TransportUnitTest, balance_without_penalty_uses_zero) {
+    TransportProblem tp;
+    tp.m = 2;
+    tp.n = 2;
+    tp.supply = {20, 10};
+    tp.demand = {25, 10};
+    tp.cost = {{1, 2}, {3, 4}};
+    
+    TransportProblem balanced = tp.balance();
+    
+    EXPECT_EQ(balanced.m, 3u);
+    EXPECT_NEAR(balanced.cost[2][0], 0.0, EPS);
+    EXPECT_NEAR(balanced.cost[2][1], 0.0, EPS);
+}
+
+TEST(MODISolverCycleTest, findCyclePublic) {
+    std::vector<std::pair<size_t, size_t>> basis = {{0, 0}, {0, 1}, {1, 1}};
+    
+    auto cycle = MODISolver::findCycle(1, 0, basis);
+    
+    if (!cycle.empty()) {
+        EXPECT_EQ(cycle.front().first, 1u);
+        EXPECT_EQ(cycle.front().second, 0u);
+    }
+}
+
+TEST(MODISolverCycleTest, applyCyclePublic) {
+    std::vector<std::vector<double>> plan = {{10, 0}, {5, 10}};
+    std::vector<std::pair<size_t, size_t>> cycle = {{1, 0}, {1, 1}, {0, 1}, {0, 0}};
+    size_t leavingIndex;
+    
+    MODISolver::applyCycle(plan, cycle, leavingIndex);
+    
+    EXPECT_EQ(leavingIndex, 1u);
 }
