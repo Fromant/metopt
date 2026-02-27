@@ -47,24 +47,23 @@ public:
                            const std::vector<std::pair<size_t, size_t>>& basis,
                            const std::vector<double>& u,
                            const std::vector<double>& v);
-    
-private:
-    // Вычисление потенциалов
+
+    // Вычисление потенциалов (публичный метод для демонстрации)
     static bool computePotentials(const TransportProblem& problem,
                                  const std::vector<std::pair<size_t, size_t>>& basis,
                                  std::vector<double>& u,
                                  std::vector<double>& v);
-    
-    // Вычисление оценки для свободной клетки
-    static double computeDelta(const TransportProblem& problem,
-                              size_t i, size_t j,
-                              const std::vector<double>& u,
-                              const std::vector<double>& v);
-    
-    // Поиск клетки с минимальной оценкой
+
+    // Поиск клетки с минимальной оценкой (публичный метод для демонстрации)
     static std::optional<std::pair<size_t, size_t>> findEnteringCell(
         const TransportProblem& problem,
         const std::vector<std::pair<size_t, size_t>>& basis,
         const std::vector<double>& u,
         const std::vector<double>& v);
+
+    // Вычисление оценки для свободной клетки
+    static double computeDelta(const TransportProblem& problem,
+                              size_t i, size_t j,
+                              const std::vector<double>& u,
+                              const std::vector<double>& v);
 };
