@@ -112,5 +112,5 @@ inline void print_val_with_err(const double val1, const double val2) {
     avg = std::round(avg / factor) * factor;
     std::cout << std::fixed << std::setprecision(precision) << avg << " +- " << err << std::endl;
     const double rel_err = (err / std::abs(avg)) * 100.0;
-    std::cout << "Real error: " << std::fixed << std::setprecision(2) << rel_err << " %" << std::endl;
+    std::cout << "Relative error: " << std::fixed << std::setprecision(2) << rel_err << " %" << std::endl;
 }
