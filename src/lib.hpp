@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "linear/LinearProgram.hpp"
-#include "linear/Solvers/SimplexSolver.hpp"
+#include "linear/solvers/SimplexSolver.hpp"
 #include "transport/NorthwestCorner.hpp"
 #include "transport/TransportProblem.hpp"
 

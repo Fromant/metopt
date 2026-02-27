@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "linear/Solvers/SimplexSolver.hpp"
+#include "linear/solvers/SimplexSolver.hpp"
 #include "linear/DualBuilder.hpp"
 
 const std::string files_folder = "../../tasks/";
