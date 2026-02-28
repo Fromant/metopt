@@ -4,7 +4,7 @@
 #include <iomanip>
 #include <iostream>
 
-constexpr static double EPS = 1e-9;
+constexpr static double EPS = 1e-5;
 
 NorthwestCorner::Result NorthwestCorner::solve(const TransportProblem& problem, bool verbose) {
     Result result;

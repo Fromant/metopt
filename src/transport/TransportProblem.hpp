@@ -11,13 +11,14 @@ public:
     std::vector<double> demand; // Потребности потребителей (b_j)
     std::vector<std::vector<double>> cost; // Матрица стоимостей (c_ij)
     std::vector<double> demandPenalty; // Штраф за недопоставку для каждого потребителя
+    std::vector<double> demandThreshold; // Порог недопоставки для каждого потребителя
 
     size_t m; // Количество поставщиков
     size_t n; // Количество потребителей
 
     TransportProblem() : m(0), n(0) {}
 
-    // Чтение из файла (формат: m n, затем a_1..a_m, затем b_1..b_n, затем матрица cost)
+    // Чтение из файла (формат: m n, затем a_1..a_m, затем b_1..b_n, затем матрица cost, затем штрафы, затем пороги)
     static TransportProblem fromFile(const std::string& filename);
 
     // Чтение из консоли
@@ -29,7 +30,7 @@ public:
     // Проверка сбалансированности
     bool isBalanced(double eps = 1e-9) const;
 
-    // Балансировка (добавление фиктивного поставщика/потребителя)
+    // Балансировка с учетом порогов (добавляет фиктивного поставщика для недопоставки в пределах порога)
     TransportProblem balance() const;
 
     // Преобразование в задачу ЛП для симплекс-метода
@@ -41,7 +42,7 @@ public:
     // Вывод плана перевозок
     static void printPlan(const std::vector<std::vector<double>>& plan);
 
-    // Подсчёт общей стоимости
+    // Подсчёт общей стоимости (включая штрафы за недопоставку сверх порога)
     double calculateCost(const std::vector<std::vector<double>>& plan) const;
 
     /**

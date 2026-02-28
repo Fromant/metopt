@@ -170,6 +170,14 @@ int main(int argc, char* argv[]) {
             }
             std::cout << std::endl;
         }
+        
+        if (!problem.demandThreshold.empty()) {
+            std::cout << "\nDemand thresholds: ";
+            for (size_t j = 0; j < problem.demandThreshold.size(); ++j) {
+                std::cout << problem.demandThreshold[j] << " ";
+            }
+            std::cout << std::endl;
+        }
     } else {
         std::cout << "\nNo input file specified. Reading from console..." << std::endl;
         problem = TransportProblem::fromConsole();

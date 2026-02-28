@@ -51,8 +51,9 @@ MODISolver::Result MODISolver::solve(const TransportProblem& problem,
         }
 
         // Шаг 1: Вычисляем потенциалы
-        std::vector<double> u(problem.m, 0.0);
-        std::vector<double> v(problem.n, 0.0);
+        std::vector<double> u(problem.m, 1e100);
+        std::vector<double> v(problem.n, 1e100);
+        u[0] = 0.0;
 
         if (!computePotentials(problem, result.basis, u, v)) {
             result.errorMessage = "Failed to compute potentials";
@@ -213,9 +214,19 @@ MODISolver::findEnteringCell(const TransportProblem& problem, const std::vector<
 std::vector<std::pair<size_t, size_t>> MODISolver::findCycle(size_t startI, size_t startJ,
                                                              const std::vector<std::pair<size_t, size_t>>& basis) {
 
+    // Infer dimensions from basis
+    size_t maxI = 0, maxJ = 0;
+    for (const auto& cell : basis) {
+        maxI = std::max(maxI, cell.first);
+        maxJ = std::max(maxJ, cell.second);
+    }
+    size_t numRows = maxI + 1;
+    size_t numCols = maxJ + 1;
+
     // Используем DFS для поиска цикла
     // Цикл должен начинаться и заканчиваться в (startI, startJ)
     // и проходить только через базисные клетки (кроме начальной)
+    // Важно: движения должны чередоваться между строками и столбцами
 
     std::vector<std::pair<size_t, size_t>> cycle;
     cycle.emplace_back(startI, startJ);
@@ -224,68 +235,101 @@ std::vector<std::pair<size_t, size_t>> MODISolver::findCycle(size_t startI, size
     std::set<std::pair<size_t, size_t>> basisSet(basis.begin(), basis.end());
 
     // Функция для поиска пути
-    std::function<bool(size_t, size_t, std::vector<std::pair<size_t, size_t>>&, std::set<std::pair<size_t, size_t>>)>
+    // prevRowMove = true means last move was along a row, next must be along column
+    std::function<bool(size_t, size_t, std::vector<std::pair<size_t, size_t>>&, std::set<std::pair<size_t, size_t>>, bool)>
         dfs;
 
     dfs = [&](size_t i, size_t j, std::vector<std::pair<size_t, size_t>>& path,
-              std::set<std::pair<size_t, size_t>> visited) -> bool {
-        // Пробуем двигаться по строке i
-        for (size_t jj = 0; jj < 100; ++jj) { // Ограничение для безопасности
-            if (jj == j)
-                continue;
-
-            auto cell = std::make_pair(i, jj);
-            if (visited.contains(cell))
-                continue;
-
-            if (basisSet.contains(cell) || cell == std::make_pair(startI, startJ)) {
-                path.emplace_back(cell);
-                visited.insert(cell);
-
-                if (cell == std::make_pair(startI, startJ) && path.size() > 1) {
-                    return true; // Нашли цикл
+              std::set<std::pair<size_t, size_t>> visited, bool prevRowMove) -> bool {
+        
+        // Check if we've returned to start
+        if (i == startI && j == startJ && path.size() > 0) {
+            return true;
+        }
+        
+        // Skip if already visited (but not the start cell we're returning to)
+        if (visited.contains({i, j})) {
+            return false;
+        }
+        
+        // Add current cell to path and visited
+        path.emplace_back(i, j);
+        visited.insert({i, j});
+        
+        // If previous move was along row, now try column moves
+        // If previous move was along column (or at start), now try row moves
+        if (prevRowMove) {
+            // Try column moves (different rows, same column)
+            for (size_t ii = 0; ii < numRows; ++ii) {
+                if (ii == i) continue;
+                auto cell = std::make_pair(ii, j);
+                if (basisSet.contains(cell) || cell == std::make_pair(startI, startJ)) {
+                    if (dfs(ii, j, path, visited, false)) {
+                        return true;
+                    }
                 }
-
-                if (dfs(i, jj, path, visited)) {
-                    return true;
+            }
+        } else {
+            // Try row moves (same row, different columns)
+            for (size_t jj = 0; jj < numCols; ++jj) {
+                if (jj == j) continue;
+                auto cell = std::make_pair(i, jj);
+                if (basisSet.contains(cell) || cell == std::make_pair(startI, startJ)) {
+                    if (dfs(i, jj, path, visited, true)) {
+                        return true;
+                    }
                 }
-
-                path.pop_back();
             }
         }
 
-        // Пробуем двигаться по столбцу j
-        for (size_t ii = 0; ii < 100; ++ii) {
-            if (ii == i)
-                continue;
-
-            auto cell = std::make_pair(ii, j);
-            if (visited.contains(cell))
-                continue;
-
-            if (basisSet.contains(cell) || cell == std::make_pair(startI, startJ)) {
-                path.emplace_back(cell);
-                visited.insert(cell);
-
-                if (cell == std::make_pair(startI, startJ) && path.size() > 1) {
-                    return true;
-                }
-
-                if (dfs(ii, j, path, visited)) {
-                    return true;
-                }
-
-                path.pop_back();
-            }
-        }
-
+        // Backtrack
+        path.pop_back();
+        visited.erase({i, j});
         return false;
     };
 
+    // Start without the start cell in visited - we need to be able to return to it
     std::set<std::pair<size_t, size_t>> visited;
-    visited.insert({startI, startJ});
+    
+    // Start from the entering cell, but don't add it to cycle yet
+    // First try all possible first moves from start
+    bool found = false;
+    
+    // Try row moves first (same row, different columns)
+    for (size_t jj = 0; jj < numCols && !found; ++jj) {
+        if (jj == startJ) continue;
+        auto cell = std::make_pair(startI, jj);
+        if (basisSet.contains(cell)) {
+            std::vector<std::pair<size_t, size_t>> path;
+            path.emplace_back(startI, startJ);  // Add start only
+            visited.clear();
+            visited.insert({startI, startJ});
+            // Pass first cell to dfs so it can add it
+            if (dfs(cell.first, cell.second, path, visited, true)) {
+                cycle = path;
+                found = true;
+            }
+        }
+    }
+    
+    // Try column moves (different rows, same column)
+    for (size_t ii = 0; ii < numRows && !found; ++ii) {
+        if (ii == startI) continue;
+        auto cell = std::make_pair(ii, startJ);
+        if (basisSet.contains(cell)) {
+            std::vector<std::pair<size_t, size_t>> path;
+            path.emplace_back(startI, startJ);  // Add start only
+            visited.clear();
+            visited.insert({startI, startJ});
+            // Pass first cell to dfs so it can add it
+            if (dfs(cell.first, cell.second, path, visited, false)) {
+                cycle = path;
+                found = true;
+            }
+        }
+    }
 
-    if (dfs(startI, startJ, cycle, visited)) {
+    if (found) {
         return cycle;
     }
 

@@ -59,6 +59,16 @@ TransportProblem TransportProblem::fromFile(const std::string& filename) {
         for (size_t j = 1; j < problem.n; ++j) {
             file >> problem.demandPenalty[j];
         }
+        
+        // Чтение порогов недопоставки (опционально)
+        problem.demandThreshold.resize(problem.n, 0.0);
+        double firstThreshold;
+        if (file >> firstThreshold) {
+            problem.demandThreshold[0] = firstThreshold;
+            for (size_t j = 1; j < problem.n; ++j) {
+                file >> problem.demandThreshold[j];
+            }
+        }
     }
 
     return problem;
@@ -175,30 +185,47 @@ TransportProblem TransportProblem::balance() const {
     }
 
     TransportProblem balanced = *this;
+    
     double totalSupply = std::accumulate(supply.begin(), supply.end(), 0.0);
     double totalDemand = std::accumulate(demand.begin(), demand.end(), 0.0);
+    
+    // Calculate total threshold
+    double totalThreshold = 0.0;
+    if (!demandThreshold.empty()) {
+        totalThreshold = std::accumulate(demandThreshold.begin(), demandThreshold.end(), 0.0);
+    }
 
+    // Handle thresholds: add dummy supplier for free underdelivery (cost = 0)
+    if (totalThreshold > 0) {
+        balanced.supply.emplace_back(totalThreshold);
+        std::vector<double> thresholdCost(balanced.n, 0.0);  // Zero cost for threshold
+        balanced.cost.emplace_back(thresholdCost);
+        balanced.m++;
+    }
+    
+    // Now balance supply and demand (considering threshold dummy was added)
+    totalSupply = std::accumulate(balanced.supply.begin(), balanced.supply.end(), 0.0);
+    
     if (totalSupply > totalDemand) {
-        // Добавляем фиктивного потребителя (избыток предложения)
+        // Add dummy consumer for excess supply
         balanced.demand.emplace_back(totalSupply - totalDemand);
         for (size_t i = 0; i < balanced.m; ++i) {
             balanced.cost[i].emplace_back(0.0);
         }
         balanced.n++;
-        // Penalty for new column is 0 (no penalty for excess supply)
-    } else {
-        // Добавляем фиктивного поставщика (недопоставка/недополучение)
-        // Стоимость = штраф за недопоставку для каждого потребителя
+    } else if (totalSupply < totalDemand) {
+        // Need dummy supplier for remaining shortage (penalty applies)
         balanced.supply.emplace_back(totalDemand - totalSupply);
-        std::vector<double> dummySupplierCost;
+        std::vector<double> penaltyCost;
         if (demandPenalty.empty()) {
-            dummySupplierCost = std::vector<double>(balanced.n, 0.0);
+            penaltyCost = std::vector<double>(balanced.n, 0.0);
         } else {
-            dummySupplierCost = demandPenalty;
+            penaltyCost = demandPenalty;
         }
-        balanced.cost.emplace_back(dummySupplierCost);
+        balanced.cost.emplace_back(penaltyCost);
         balanced.m++;
     }
+    // If totalSupply == totalDemand, no penalty dummy needed
 
     return balanced;
 }
