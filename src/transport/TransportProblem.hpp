@@ -43,14 +43,14 @@ public:
     [[nodiscard]] TransportProblem balance() const;
     [[nodiscard]] LinearProgram toLinearProgram() const;
     [[nodiscard]] double calculatePenaltyCost(const std::vector<std::vector<double>>& shipments) const;
+    static TransportProblem createExpandedProblem(const TransportProblem& original);
 
     void print(const std::string& title = "Transport Problem") const;
 
     // Static helpers
     [[nodiscard]] static std::vector<std::vector<double>> restorePlanFromVector(const std::vector<double>& lp_solution,
                                                                                 size_t original_m, size_t original_n,
-                                                                                size_t balanced_m, size_t balanced_n,
-                                                                                bool has_penalties);
+                                                                                size_t expanded_m, size_t expanded_n);
 
     [[nodiscard]] static bool validatePlan(const std::vector<std::vector<double>>& plan,
                                            const std::vector<double>& supplies, const std::vector<double>& demands,

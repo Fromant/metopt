@@ -36,17 +36,13 @@ void solve_with_modi(const TransportProblem& problem, bool verbose) {
 void solve_with_simplex(const TransportProblem& original_problem, bool verbose) {
     std::cout << "\n========== SIMPLEX METHOD ==========" << std::endl;
 
-    // 1. Балансируем задачу (как делает toLinearProgram)
-    TransportProblem balanced = original_problem.balance();
-
-    // 2. Преобразуем в ЛП
-    LinearProgram lp = balanced.toLinearProgram();
+    TransportProblem expanded = TransportProblem::createExpandedProblem(original_problem);
+    LinearProgram lp = expanded.toLinearProgram();
 
     if (verbose) {
         lp.print("LP form of transport problem");
     }
 
-    // 3. Решаем симплекс-методом
     auto result = SimplexSolver::solve(lp, false);
 
     if (!result.is_feasible) {
@@ -63,15 +59,11 @@ void solve_with_simplex(const TransportProblem& original_problem, bool verbose) 
         std::cout << "WARNING: Solution is not optimal" << std::endl;
     }
 
-    // 4. Восстанавливаем план ОРИГИНАЛЬНОЙ задачи
-    auto plan = TransportProblem::restorePlanFromVector(
-        result.x,  // вектор решения от симплекса
-        original_problem.numSuppliers(),   // original_m
-        original_problem.numConsumers(),   // original_n
-        balanced.numSuppliers(),           // balanced_m
-        balanced.numConsumers(),           // balanced_n
-        balanced.penaltyRates().has_value() // has_penalties
-    );
+    auto plan = TransportProblem::restorePlanFromVector(result.x,
+    original_problem.numSuppliers(),
+    original_problem.numConsumers(),
+    expanded.numSuppliers(),
+    expanded.numConsumers());
 
     // 5. Вывод результатов
     std::cout << "\n=== Simplex Solution ===" << std::endl;

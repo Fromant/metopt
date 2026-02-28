@@ -27,9 +27,8 @@ void CompareSolutions(const TransportProblem& problem, const TransportSolution& 
 
     // 2. Восстанавливаем план из simplex решения
     TransportProblem balanced = problem.balance();
-    auto simplex_plan = TransportProblem::restorePlanFromVector(simplex_result.x, problem.numSuppliers(),
-                                                                problem.numConsumers(), balanced.numSuppliers(),
-                                                                balanced.numConsumers(), problem.hasPenalties());
+    auto simplex_plan = TransportProblem::restorePlanFromVector(simplex_result.x, problem.numSuppliers(), problem.numConsumers(),
+                                                balanced.numSuppliers(), balanced.numConsumers());
 
     // 4. Валидируем план simplex
     EXPECT_TRUE(TransportProblem::validatePlan(simplex_plan, problem.supplies(), problem.demands()));
@@ -164,9 +163,7 @@ TEST(TransportProblemTest, RestorePlanFromVector_Basic) {
     lp_solution[8] = 20; // x[2][2] = 20
 
     auto plan = TransportProblem::restorePlanFromVector(lp_solution, 3, 3, // original dims
-                                                        3, 3, // balanced dims (same)
-                                                        false // no penalties
-    );
+                                                        3, 3);
 
     EXPECT_EQ(plan.size(), 3);
     EXPECT_EQ(plan[0].size(), 3);

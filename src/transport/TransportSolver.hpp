@@ -56,8 +56,9 @@ private:
     static bool findCycle(const TransportSolution& solution, size_t start_i, size_t start_j,
                           std::vector<std::pair<size_t, size_t>>& cycle, bool is_penalty_entering);
 
-    static void redistributeAlongCycle(TransportSolution& solution, const std::vector<std::pair<size_t, size_t>>& cycle,
-                                       double theta, bool is_penalty_entering);
+    static double redistributeAlongCycle(TransportSolution& solution,
+                                         const std::vector<std::pair<size_t, size_t>>& cycle,
+                                         std::pair<size_t, size_t>& exiting_cell, bool verbose);
 
     static void log(const std::string& message, std::vector<std::string>* log_ptr, bool verbose);
 };

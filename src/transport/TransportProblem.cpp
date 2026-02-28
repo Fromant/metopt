@@ -5,6 +5,9 @@
 #include <iostream>
 #include <numeric>
 #include <stdexcept>
+#include <optional>
+
+// ==================== Конструктор и валидация ====================
 
 TransportProblem::TransportProblem(std::vector<double> supplies, std::vector<double> demands,
                                    std::vector<std::vector<double>> costs) :
@@ -99,6 +102,55 @@ double TransportProblem::calculatePenaltyCost(const std::vector<std::vector<doub
     }
 
     return total_penalty;
+}
+
+// ==================== Создание расширенной задачи (статический метод) ====================
+
+TransportProblem TransportProblem::createExpandedProblem(const TransportProblem& original) {
+    if (!original.hasPenalties()) {
+        return original.balance(); // если штрафов нет, просто балансируем
+    }
+
+    const size_t m = original.numSuppliers();
+    const size_t n = original.numConsumers();
+
+    const size_t m_expanded = m + 1;
+    const size_t n_expanded = n + 1;
+
+    std::vector<double> supplies(m_expanded);
+    std::vector<double> demands(n_expanded);
+    std::vector<std::vector<double>> costs(m_expanded, std::vector<double>(n_expanded, 0.0));
+
+    for (size_t i = 0; i < m; ++i) {
+        supplies[i] = original.supplies_[i];
+    }
+
+    double dummy_supply = 0.0;
+    for (size_t j = 0; j < n; ++j) {
+        double max_shortage = original.demands_[j] - original.penalty_thresholds_->at(j);
+        dummy_supply += std::max(0.0, max_shortage);
+    }
+    supplies[m] = dummy_supply;
+
+    for (size_t j = 0; j < n; ++j) {
+        demands[j] = original.demands_[j];
+    }
+
+    demands[n] = original.totalSupply() + dummy_supply - original.totalDemand();
+
+    for (size_t i = 0; i < m; ++i) {
+        for (size_t j = 0; j < n; ++j) {
+            costs[i][j] = original.costs_[i][j];
+        }
+        costs[i][n] = 0.0;
+    }
+
+    for (size_t j = 0; j < n; ++j) {
+        costs[m][j] = original.penalty_rates_->at(j);
+    }
+    costs[m][n] = 0.0;
+
+    return {supplies, demands, costs};
 }
 
 // ==================== Чтение из файла ====================
@@ -200,76 +252,59 @@ TransportProblem TransportProblem::readFromConsole() {
 }
 
 // ==================== Преобразование в ЛП ====================
-
 LinearProgram TransportProblem::toLinearProgram() const {
-    TransportProblem balanced = balance();
-    const size_t m = balanced.numSuppliers();
-    const size_t n = balanced.numConsumers();
+    const size_t m = numSuppliers();
+    const size_t n = numConsumers();
 
-    const size_t num_x_vars = m * n;
-    const size_t num_u_vars = balanced.hasPenalties() ? n : 0;
-    const size_t num_vars = num_x_vars + num_u_vars;
+    const size_t num_vars = m * n; // только переменные x_ij
 
     std::vector<double> objective(num_vars, 0.0);
     for (size_t i = 0; i < m; ++i)
         for (size_t j = 0; j < n; ++j)
-            objective[i * n + j] = balanced.costs()[i][j];
-
-    if (balanced.hasPenalties()) {
-        for (size_t j = 0; j < n; ++j)
-            objective[num_x_vars + j] = balanced.penalty_rates_->at(j);
-    }
+            objective[i * n + j] = costs_[i][j];
 
     std::vector<std::vector<double>> constraints;
     std::vector<std::string> relations;
     std::vector<double> rhs;
 
-    // Ограничения поставщиков
+    // Ограничения поставщиков (все m)
     for (size_t i = 0; i < m; ++i) {
         std::vector<double> row(num_vars, 0.0);
         for (size_t j = 0; j < n; ++j)
             row[i * n + j] = 1.0;
-        constraints.emplace_back(std::move(row));
-        relations.emplace_back("=");
-        rhs.emplace_back(balanced.supplies()[i]);
+        constraints.push_back(std::move(row));
+        relations.push_back("=");
+        rhs.push_back(supplies_[i]);
     }
 
-    // Ограничения потребителей (n-1 штук для устранения линейной зависимости)
+    // Ограничения потребителей (первые n-1, последнее исключаем)
     for (size_t j = 0; j < n - 1; ++j) {
         std::vector<double> row(num_vars, 0.0);
         for (size_t i = 0; i < m; ++i)
             row[i * n + j] = 1.0;
-
-        if (balanced.hasPenalties()) {
-            row[num_x_vars + j] = 1.0;
-            double effective_demand = balanced.demands()[j] - balanced.penalty_thresholds_->at(j);
-            constraints.emplace_back(std::move(row));
-            relations.emplace_back(">=");
-            rhs.emplace_back(std::max(0.0, effective_demand));
-        } else {
-            constraints.emplace_back(std::move(row));
-            relations.emplace_back("=");
-            rhs.emplace_back(balanced.demands()[j]);
-        }
+        constraints.push_back(std::move(row));
+        relations.push_back("=");
+        rhs.push_back(demands_[j]);
     }
 
     std::vector<std::string> var_constraints(num_vars, ">=0");
 
-    auto lp = LinearProgram(true, std::move(objective), std::move(constraints), std::move(relations), std::move(rhs),
+    auto lp = LinearProgram(true, std::move(objective), std::move(constraints),
+                            std::move(relations), std::move(rhs),
                             std::move(var_constraints));
-
     lp.prettierCoeffs();
     return lp;
 }
 
 // ==================== Восстановление плана из LP ====================
 
-std::vector<std::vector<double>> TransportProblem::restorePlanFromVector(const std::vector<double>& lp_solution,
-                                                                         size_t original_m, size_t original_n,
-                                                                         size_t balanced_m, size_t balanced_n,
-                                                                         bool has_penalties) {
+std::vector<std::vector<double>> TransportProblem::restorePlanFromVector(
+    const std::vector<double>& lp_solution,
+    size_t original_m, size_t original_n,
+    size_t expanded_m, size_t expanded_n)
+{
     std::vector<std::vector<double>> plan(original_m, std::vector<double>(original_n, 0.0));
-    const size_t num_x_vars = balanced_m * balanced_n;
+    const size_t num_x_vars = expanded_m * expanded_n;
 
     if (lp_solution.size() < num_x_vars) {
         throw std::invalid_argument("LP solution vector too small");
@@ -277,7 +312,7 @@ std::vector<std::vector<double>> TransportProblem::restorePlanFromVector(const s
 
     for (size_t i = 0; i < original_m; ++i) {
         for (size_t j = 0; j < original_n; ++j) {
-            const size_t idx = i * balanced_n + j;
+            const size_t idx = i * expanded_n + j; // позиция в расширенной матрице
             if (idx < lp_solution.size()) {
                 plan[i][j] = std::max(0.0, lp_solution[idx]);
             }
