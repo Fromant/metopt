@@ -257,7 +257,7 @@ TEST_F(TransportUnitTest, balance_without_penalty_uses_zero) {
 TEST(MODISolverCycleTest, findCyclePublic) {
     std::vector<std::pair<size_t, size_t>> basis = {{0, 0}, {0, 1}, {1, 1}};
     
-    auto cycle = MODISolver::findCycle(1, 0, basis);
+    auto cycle = MODISolver::findCycle(1, 0, basis, TODO, TODO);
     
     if (!cycle.empty()) {
         EXPECT_EQ(cycle.front().first, 1u);

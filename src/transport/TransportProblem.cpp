@@ -1,182 +1,73 @@
-#include "transport/TransportProblem.hpp"
-
+#include "TransportProblem.hpp"
 #include <cmath>
+#include <format>
 #include <fstream>
-#include <iomanip>
 #include <iostream>
 #include <numeric>
-#include <sstream>
+#include <stdexcept>
 
-constexpr static double EPS = 1e-9;
+// ==================== Конструкторы ====================
 
-TransportProblem TransportProblem::fromFile(const std::string& filename) {
-    TransportProblem problem;
-    std::ifstream file(filename);
-
-    if (!file.is_open()) {
-        throw std::runtime_error("Cannot open file: " + filename);
-    }
-
-    // Чтение m и n
-    file >> problem.m >> problem.n;
-
-    if (problem.m == 0 || problem.n == 0) {
-        throw std::runtime_error("Invalid dimensions: m and n must be > 0");
-    }
-
-    // Чтение запасов
-    problem.supply.resize(problem.m);
-    for (size_t i = 0; i < problem.m; ++i) {
-        file >> problem.supply[i];
-        if (problem.supply[i] < 0) {
-            throw std::runtime_error("Supply must be non-negative");
-        }
-    }
-
-    // Чтение потребностей
-    problem.demand.resize(problem.n);
-    for (size_t j = 0; j < problem.n; ++j) {
-        file >> problem.demand[j];
-        if (problem.demand[j] < 0) {
-            throw std::runtime_error("Demand must be non-negative");
-        }
-    }
-
-    // Чтение матрицы стоимостей
-    problem.cost.resize(problem.m, std::vector<double>(problem.n));
-    for (size_t i = 0; i < problem.m; ++i) {
-        for (size_t j = 0; j < problem.n; ++j) {
-            file >> problem.cost[i][j];
-        }
-    }
-
-    // Чтение штрафов за недопоставку (опционально)
-    // Формат: после матрицы может идти одна строка с n штрафами
-    problem.demandPenalty.resize(problem.n, 0.0);
-    double firstPenalty;
-    if (file >> firstPenalty) {
-        problem.demandPenalty[0] = firstPenalty;
-        for (size_t j = 1; j < problem.n; ++j) {
-            file >> problem.demandPenalty[j];
-        }
-        
-        // Чтение порогов недопоставки (опционально)
-        problem.demandThreshold.resize(problem.n, 0.0);
-        double firstThreshold;
-        if (file >> firstThreshold) {
-            problem.demandThreshold[0] = firstThreshold;
-            for (size_t j = 1; j < problem.n; ++j) {
-                file >> problem.demandThreshold[j];
-            }
-        }
-    }
-
-    return problem;
+TransportProblem::TransportProblem(
+    std::vector<double> supplies,
+    std::vector<double> demands,
+    std::vector<std::vector<double>> costs)
+    : supplies_(std::move(supplies))
+    , demands_(std::move(demands))
+    , costs_(std::move(costs))
+{
+    validate();
 }
 
-TransportProblem TransportProblem::fromConsole() {
-    TransportProblem problem;
+// ==================== Валидация ====================
 
-    std::cout << "Enter number of suppliers (m) and consumers (n): ";
-    std::cin >> problem.m >> problem.n;
-
-    if (problem.m == 0 || problem.n == 0) {
-        throw std::runtime_error("Invalid dimensions: m and n must be > 0");
+void TransportProblem::validate() const {
+    if (supplies_.empty() || demands_.empty()) {
+        throw std::invalid_argument("Supplies and demands cannot be empty");
     }
-
-    std::cout << "Enter " << problem.m << " supply values: ";
-    problem.supply.resize(problem.m);
-    for (size_t i = 0; i < problem.m; ++i) {
-        std::cin >> problem.supply[i];
-        if (problem.supply[i] < 0) {
-            throw std::runtime_error("Supply must be non-negative");
+    if (costs_.size() != supplies_.size()) {
+        throw std::invalid_argument("Cost matrix rows must match number of suppliers");
+    }
+    for (size_t i = 0; i < costs_.size(); ++i) {
+        if (costs_[i].size() != demands_.size()) {
+            throw std::invalid_argument("Cost matrix columns must match number of consumers");
         }
     }
 
-    std::cout << "Enter " << problem.n << " demand values: ";
-    problem.demand.resize(problem.n);
-    for (size_t j = 0; j < problem.n; ++j) {
-        std::cin >> problem.demand[j];
-        if (problem.demand[j] < 0) {
-            throw std::runtime_error("Demand must be non-negative");
+    if (penalty_thresholds_.has_value() != penalty_rates_.has_value()) {
+        throw std::invalid_argument("Penalty thresholds and rates must be both set or both unset");
+    }
+    if (penalty_thresholds_.has_value()) {
+        if (penalty_thresholds_->size() != demands_.size() ||
+            penalty_rates_->size() != demands_.size()) {
+            throw std::invalid_argument("Penalty vectors must match number of consumers");
         }
     }
-
-    std::cout << "Enter cost matrix (" << problem.m << "x" << problem.n << "):" << std::endl;
-    problem.cost.resize(problem.m, std::vector<double>(problem.n));
-    for (size_t i = 0; i < problem.m; ++i) {
-        for (size_t j = 0; j < problem.n; ++j) {
-            std::cin >> problem.cost[i][j];
-        }
-    }
-
-    std::cout << "Enter demand penalties (one per consumer, or press Enter for 0): " << std::endl;
-    problem.demandPenalty.resize(problem.n, 0.0);
-    std::string line;
-    std::getline(std::cin, line);
-    std::getline(std::cin, line);
-    if (!line.empty()) {
-        std::istringstream iss(line);
-        for (size_t j = 0; j < problem.n; ++j) {
-            if (!(iss >> problem.demandPenalty[j])) {
-                problem.demandPenalty[j] = 0.0;
-            }
-        }
-    }
-
-    return problem;
 }
 
-bool TransportProblem::validate() const {
-    if (m == 0 || n == 0) {
-        std::cerr << "Error: Invalid dimensions" << std::endl;
-        return false;
-    }
+// ==================== Пенальти ====================
 
-    if (supply.size() != m || demand.size() != n) {
-        std::cerr << "Error: Supply/demand vector size mismatch" << std::endl;
-        return false;
+void TransportProblem::setPenalties(std::vector<double> thresholds, std::vector<double> rates) {
+    if (thresholds.size() != demands_.size() || rates.size() != demands_.size()) {
+        throw std::invalid_argument("Penalty vectors must match number of consumers");
     }
-
-    if (cost.size() != m) {
-        std::cerr << "Error: Cost matrix rows mismatch" << std::endl;
-        return false;
-    }
-
-    for (size_t i = 0; i < m; ++i) {
-        if (cost[i].size() != n) {
-            std::cerr << "Error: Cost matrix columns mismatch" << std::endl;
-            return false;
-        }
-    }
-
-    if (!demandPenalty.empty() && demandPenalty.size() != n) {
-        std::cerr << "Error: Demand penalty vector size mismatch" << std::endl;
-        return false;
-    }
-    // Also check that penalty doesn't have negative values
-    for (size_t j = 0; j < demandPenalty.size(); ++j) {
-        if (demandPenalty[j] < 0) {
-            std::cerr << "Error: Penalty must be non-negative" << std::endl;
-            return false;
-        }
-    }
-
-    double totalSupply = std::accumulate(supply.begin(), supply.end(), 0.0);
-    double totalDemand = std::accumulate(demand.begin(), demand.end(), 0.0);
-
-    if (totalSupply < EPS || totalDemand < EPS) {
-        std::cerr << "Error: Total supply and demand must be positive" << std::endl;
-        return false;
-    }
-
-    return true;
+    penalty_thresholds_ = std::move(thresholds);
+    penalty_rates_ = std::move(rates);
+    validate();
 }
 
-bool TransportProblem::isBalanced(double eps) const {
-    double totalSupply = std::accumulate(supply.begin(), supply.end(), 0.0);
-    double totalDemand = std::accumulate(demand.begin(), demand.end(), 0.0);
-    return std::abs(totalSupply - totalDemand) < eps;
+// ==================== Балансировка ====================
+
+bool TransportProblem::isBalanced(double epsilon) const {
+    return std::abs(totalSupply() - totalDemand()) < epsilon;
+}
+
+double TransportProblem::totalSupply() const {
+    return std::accumulate(supplies_.begin(), supplies_.end(), 0.0);
+}
+
+double TransportProblem::totalDemand() const {
+    return std::accumulate(demands_.begin(), demands_.end(), 0.0);
 }
 
 TransportProblem TransportProblem::balance() const {
@@ -185,199 +76,368 @@ TransportProblem TransportProblem::balance() const {
     }
 
     TransportProblem balanced = *this;
-    
-    double totalSupply = std::accumulate(supply.begin(), supply.end(), 0.0);
-    double totalDemand = std::accumulate(demand.begin(), demand.end(), 0.0);
-    
-    // Calculate total threshold
-    double totalThreshold = 0.0;
-    if (!demandThreshold.empty()) {
-        totalThreshold = std::accumulate(demandThreshold.begin(), demandThreshold.end(), 0.0);
+    const double supply = totalSupply();
+    const double demand = totalDemand();
+
+    if (supply > demand) {
+        balanced.demands_.push_back(supply - demand);
+        for (auto& row : balanced.costs_) {
+            row.push_back(0.0);
+        }
+        if (balanced.penalty_thresholds_) {
+            balanced.penalty_thresholds_->push_back(0.0);
+            balanced.penalty_rates_->push_back(0.0);
+        }
+    } else {
+        balanced.supplies_.push_back(demand - supply);
+        balanced.costs_.push_back(std::vector<double>(balanced.demands_.size(), 0.0));
     }
 
-    // Handle thresholds: add dummy supplier for free underdelivery (cost = 0)
-    if (totalThreshold > 0) {
-        balanced.supply.emplace_back(totalThreshold);
-        std::vector<double> thresholdCost(balanced.n, 0.0);  // Zero cost for threshold
-        balanced.cost.emplace_back(thresholdCost);
-        balanced.m++;
-    }
-    
-    // Now balance supply and demand (considering threshold dummy was added)
-    totalSupply = std::accumulate(balanced.supply.begin(), balanced.supply.end(), 0.0);
-    
-    if (totalSupply > totalDemand) {
-        // Add dummy consumer for excess supply
-        balanced.demand.emplace_back(totalSupply - totalDemand);
-        for (size_t i = 0; i < balanced.m; ++i) {
-            balanced.cost[i].emplace_back(0.0);
-        }
-        balanced.n++;
-    } else if (totalSupply < totalDemand) {
-        // Need dummy supplier for remaining shortage (penalty applies)
-        balanced.supply.emplace_back(totalDemand - totalSupply);
-        std::vector<double> penaltyCost;
-        if (demandPenalty.empty()) {
-            penaltyCost = std::vector<double>(balanced.n, 0.0);
-        } else {
-            penaltyCost = demandPenalty;
-        }
-        balanced.cost.emplace_back(penaltyCost);
-        balanced.m++;
-    }
-    // If totalSupply == totalDemand, no penalty dummy needed
-
+    balanced.validate();
     return balanced;
 }
 
-LinearProgram TransportProblem::toLinearProgram() const {
-    if (!validate()) {
-        throw std::runtime_error("Invalid transport problem");
-    }
+// ==================== Расчёт штрафов ====================
 
-    // Проверяем баланс
-    if (!isBalanced()) {
-        throw std::runtime_error("Transport problem must be balanced. Call balance() first.");
-    }
+double TransportProblem::calculatePenaltyCost(
+    const std::vector<std::vector<double>>& shipments) const
+{
+    if (!hasPenalties()) return 0.0;
 
-    size_t numVars = m * n;
-    size_t numConstraints = m + n - 1; // Одно ограничение удаляем (линейная зависимость)
+    const size_t n = demands_.size();
+    const size_t m = shipments.size();
+    double total_penalty = 0.0;
 
-    // 1. Целевая функция: flatten cost matrix
-    std::vector<double> objective(numVars);
-    for (size_t i = 0; i < m; ++i) {
-        for (size_t j = 0; j < n; ++j) {
-            objective[i * n + j] = cost[i][j];
-        }
-    }
-
-    // 2. Матрица ограничений A и вектор b
-    std::vector<std::vector<double>> constraints(numConstraints, std::vector<double>(numVars, 0.0));
-    std::vector<double> rhs(numConstraints);
-    std::vector<std::string> relations(numConstraints, "="); // Все ограничения - равенства
-
-    // Ограничения по поставщикам (m строк): sum_j x[i][j] = supply[i]
-    for (size_t i = 0; i < m; ++i) {
-        for (size_t j = 0; j < n; ++j) {
-            constraints[i][i * n + j] = 1.0;
-        }
-        rhs[i] = supply[i];
-    }
-
-    // Ограничения по потребителям (n-1 строк): sum_i x[i][j] = demand[j]
-    // Последнее ограничение не добавляем (линейная зависимость)
-    for (size_t j = 0; j < n - 1; ++j) {
-        size_t row = m + j;
+    for (size_t j = 0; j < n; ++j) {
+        double delivered = 0.0;
         for (size_t i = 0; i < m; ++i) {
-            constraints[row][i * n + j] = 1.0;
-        }
-        rhs[row] = demand[j];
-    }
-
-    // 3. Ограничения на переменные: все x[i][j] >= 0
-    std::vector<std::string> var_constraints(numVars, ">=0");
-
-    // 4. Создаём задачу: минимизация
-    return {
-        true, // minimize = true
-        objective, // c
-        constraints, // A
-        relations, // все "="
-        rhs, // b
-        var_constraints // все ">=0"
-    };
-}
-
-void TransportProblem::print(const std::string& title) const {
-    std::cout << "\n=== " << title << " ===" << std::endl;
-    std::cout << "Suppliers (m): " << m << std::endl;
-    std::cout << "Consumers (n): " << n << std::endl;
-
-    std::cout << "\nSupply: ";
-    for (size_t i = 0; i < m; ++i) {
-        std::cout << "a" << (i + 1) << "=" << supply[i] << " ";
-    }
-    std::cout << "(total: " << std::accumulate(supply.begin(), supply.end(), 0.0) << ")" << std::endl;
-
-    std::cout << "Demand: ";
-    for (size_t j = 0; j < n; ++j) {
-        std::cout << "b" << (j + 1) << "=" << demand[j] << " ";
-    }
-    std::cout << "(total: " << std::accumulate(demand.begin(), demand.end(), 0.0) << ")" << std::endl;
-
-    std::cout << "\nCost matrix:" << std::endl;
-    std::cout << "       ";
-    for (size_t j = 0; j < n; ++j) {
-        std::cout << std::setw(8) << ("B" + std::to_string(j + 1));
-    }
-    std::cout << std::endl;
-
-    for (size_t i = 0; i < m; ++i) {
-        std::cout << "A" << (i + 1) << "  ";
-        for (size_t j = 0; j < n; ++j) {
-            std::cout << std::setw(8) << cost[i][j];
-        }
-        std::cout << " | " << supply[i] << std::endl;
-    }
-
-    std::cout << "       ";
-    for (size_t j = 0; j < n; ++j) {
-        std::cout << std::setw(8) << demand[j];
-    }
-    std::cout << std::endl;
-    std::cout << "========================\n" << std::endl;
-}
-
-void TransportProblem::printPlan(const std::vector<std::vector<double>>& plan) {
-    size_t m = plan.size();
-    if (m == 0) {
-        std::cout << "Empty plan" << std::endl;
-        return;
-    }
-    size_t n = plan[0].size();
-
-    std::cout << "\nTransportation plan:" << std::endl;
-    std::cout << "       ";
-    for (size_t j = 0; j < n; ++j) {
-        std::cout << std::setw(10) << ("B" + std::to_string(j + 1));
-    }
-    std::cout << std::endl;
-
-    for (size_t i = 0; i < m; ++i) {
-        std::cout << "A" << (i + 1) << "  ";
-        for (size_t j = 0; j < n; ++j) {
-            if (plan[i][j] > EPS) {
-                std::cout << std::setw(10) << std::fixed << std::setprecision(2) << plan[i][j];
-            } else {
-                std::cout << std::setw(10) << "-";
+            if (j < shipments[i].size()) {
+                delivered += shipments[i][j];
             }
         }
-        std::cout << std::endl;
+
+        const double threshold = penalty_thresholds_->at(j);
+        const double shortage = std::max(0.0, demands_[j] - threshold - delivered);
+        total_penalty += shortage * penalty_rates_->at(j);
     }
+
+    return total_penalty;
 }
 
-double TransportProblem::calculateCost(const std::vector<std::vector<double>>& plan) const {
-    double total = 0.0;
-    for (size_t i = 0; i < m; ++i) {
-        for (size_t j = 0; j < n; ++j) {
-            total += cost[i][j] * plan[i][j];
-        }
+// ==================== Чтение из файла ====================
+
+TransportProblem TransportProblem::readFromFile(const std::string& filename) {
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        throw std::runtime_error("Cannot open file: " + filename);
     }
-    return total;
+
+    size_t m, n;
+    file >> m >> n;
+
+    std::vector<double> supplies(m);
+    for (auto& s : supplies) file >> s;
+
+    std::vector<double> demands(n);
+    for (auto& d : demands) file >> d;
+
+    std::vector<std::vector<double>> costs(m, std::vector<double>(n));
+    for (auto& row : costs) {
+        for (auto& c : row) file >> c;
+    }
+
+    TransportProblem problem(supplies, demands, costs);
+
+    // Читаем пенальти если есть
+    std::string marker;
+    if (file >> marker && marker == "PENALTIES") {
+        std::vector<double> thresholds(n), rates(n);
+        for (auto& t : thresholds) file >> t;
+        for (auto& r : rates) file >> r;
+        problem.setPenalties(std::move(thresholds), std::move(rates));
+    }
+
+    return problem;
 }
 
-std::vector<std::vector<double>> TransportProblem::restorePlanFromVector(const std::vector<double>& x_vector, size_t m,
-                                                                         size_t n) {
-    if (x_vector.size() != m * n) {
-        throw std::runtime_error("Vector size mismatch: expected " + std::to_string(m * n) + ", got " +
-                                 std::to_string(x_vector.size()));
+// ==================== Чтение с консоли ====================
+
+TransportProblem TransportProblem::readFromConsole() {
+    std::cout << "=== Ввод транспортной задачи ===\n";
+
+    size_t m, n;
+    std::cout << "Число поставщиков (m): ";
+    std::cin >> m;
+    std::cout << "Число потребителей (n): ";
+    std::cin >> n;
+
+    std::vector<double> supplies(m);
+    std::cout << "Запасы поставщиков:\n";
+    for (size_t i = 0; i < m; ++i) {
+        std::cout << "  A[" << i+1 << "]: ";
+        std::cin >> supplies[i];
     }
 
-    std::vector<std::vector<double>> plan(m, std::vector<double>(n, 0.0));
+    std::vector<double> demands(n);
+    std::cout << "Потребности потребителей:\n";
+    for (size_t j = 0; j < n; ++j) {
+        std::cout << "  B[" << j+1 << "]: ";
+        std::cin >> demands[j];
+    }
+
+    std::vector<std::vector<double>> costs(m, std::vector<double>(n));
+    std::cout << "Матрица стоимостей:\n";
     for (size_t i = 0; i < m; ++i) {
         for (size_t j = 0; j < n; ++j) {
-            plan[i][j] = x_vector[i * n + j];
+            std::cout << "  c[" << i+1 << "][" << j+1 << "]: ";
+            std::cin >> costs[i][j];
         }
     }
+
+    TransportProblem problem(supplies, demands, costs);
+
+    char add_penalties;
+    std::cout << "Добавить штрафы за недопоставку? (y/n): ";
+    std::cin >> add_penalties;
+    if (add_penalties == 'y' || add_penalties == 'Y') {
+        std::vector<double> thresholds(n), rates(n);
+        std::cout << "Пороги недопоставки:\n";
+        for (size_t j = 0; j < n; ++j) {
+            std::cout << "  Threshold[" << j+1 << "]: ";
+            std::cin >> thresholds[j];
+        }
+        std::cout << "Ставки штрафов:\n";
+        for (size_t j = 0; j < n; ++j) {
+            std::cout << "  PenaltyRate[" << j+1 << "]: ";
+            std::cin >> rates[j];
+        }
+        problem.setPenalties(std::move(thresholds), std::move(rates));
+    }
+
+    return problem;
+}
+
+// ==================== Преобразование в ЛП ====================
+
+LinearProgram TransportProblem::toLinearProgram() const {
+    TransportProblem balanced = balance();
+    const size_t m = balanced.numSuppliers();
+    const size_t n = balanced.numConsumers();
+
+    const size_t num_x_vars = m * n;
+    const size_t num_u_vars = balanced.hasPenalties() ? n : 0;
+    const size_t num_vars = num_x_vars + num_u_vars;
+
+    std::vector<double> objective(num_vars, 0.0);
+    for (size_t i = 0; i < m; ++i)
+        for (size_t j = 0; j < n; ++j)
+            objective[i * n + j] = balanced.costs()[i][j];
+
+    if (balanced.hasPenalties()) {
+        for (size_t j = 0; j < n; ++j)
+            objective[num_x_vars + j] = balanced.penalty_rates_->at(j);
+    }
+
+    std::vector<std::vector<double>> constraints;
+    std::vector<std::string> relations;
+    std::vector<double> rhs;
+
+    // Ограничения поставщиков
+    for (size_t i = 0; i < m; ++i) {
+        std::vector<double> row(num_vars, 0.0);
+        for (size_t j = 0; j < n; ++j)
+            row[i * n + j] = 1.0;
+        constraints.push_back(std::move(row));
+        relations.push_back("=");
+        rhs.push_back(balanced.supplies()[i]);
+    }
+
+    // Ограничения потребителей (n-1 штук для устранения линейной зависимости)
+    for (size_t j = 0; j < n - 1; ++j) {
+        std::vector<double> row(num_vars, 0.0);
+        for (size_t i = 0; i < m; ++i)
+            row[i * n + j] = 1.0;
+
+        if (balanced.hasPenalties()) {
+            row[num_x_vars + j] = 1.0;
+            double effective_demand = balanced.demands()[j] - balanced.penalty_thresholds_->at(j);
+            constraints.push_back(std::move(row));
+            relations.push_back(">=");
+            rhs.push_back(std::max(0.0, effective_demand));
+        } else {
+            constraints.push_back(std::move(row));
+            relations.push_back("=");
+            rhs.push_back(balanced.demands()[j]);
+        }
+    }
+
+    std::vector<std::string> var_constraints(num_vars, ">=0");
+
+    auto lp = LinearProgram(
+        true, std::move(objective), std::move(constraints),
+        std::move(relations), std::move(rhs), std::move(var_constraints)
+    );
+
+    lp.prettierCoeffs();
+    return lp;
+}
+
+// ==================== Восстановление плана из LP ====================
+
+std::vector<std::vector<double>> TransportProblem::restorePlanFromVector(
+    const std::vector<double>& lp_solution,
+    size_t original_m, size_t original_n,
+    size_t balanced_m, size_t balanced_n,
+    bool has_penalties)
+{
+    std::vector<std::vector<double>> plan(original_m, std::vector<double>(original_n, 0.0));
+    const size_t num_x_vars = balanced_m * balanced_n;
+
+    if (lp_solution.size() < num_x_vars) {
+        throw std::invalid_argument("LP solution vector too small");
+    }
+
+    for (size_t i = 0; i < original_m; ++i) {
+        for (size_t j = 0; j < original_n; ++j) {
+            const size_t idx = i * balanced_n + j;
+            if (idx < lp_solution.size()) {
+                plan[i][j] = std::max(0.0, lp_solution[idx]);
+            }
+        }
+    }
+
     return plan;
+}
+
+// ==================== Валидация плана ====================
+
+bool TransportProblem::validatePlan(
+    const std::vector<std::vector<double>>& plan,
+    const std::vector<double>& supplies,
+    const std::vector<double>& demands,
+    double epsilon)
+{
+    if (plan.size() != supplies.size()) return false;
+    if (plan.empty() || plan[0].size() != demands.size()) return false;
+
+    for (const auto& row : plan)
+        for (double val : row)
+            if (val < -epsilon) return false;
+
+    for (size_t i = 0; i < supplies.size(); ++i) {
+        double sum = 0;
+        for (double val : plan[i]) sum += val;
+        if (std::abs(sum - supplies[i]) > epsilon) return false;
+    }
+
+    const size_t n = plan[0].size();
+    for (size_t j = 0; j < n; ++j) {
+        double sum = 0;
+        for (size_t i = 0; i < plan.size(); ++i) sum += plan[i][j];
+        if (std::abs(sum - demands[j]) > epsilon) return false;
+    }
+
+    return true;
+}
+
+// ==================== Вывод плана ====================
+
+void TransportProblem::printPlan(
+    const std::vector<std::vector<double>>& plan,
+    const std::vector<double>& supplies,
+    const std::vector<double>& demands,
+    const std::string& title)
+{
+    std::cout << "\n" << std::string(60, '-') << "\n";
+    std::cout << "  " << title << "\n";
+    std::cout << std::string(60, '-') << "\n";
+    std::cout << std::fixed << std::setprecision(2);
+
+    if (plan.empty()) {
+        std::cout << "  [Empty plan]\n";
+        return;
+    }
+
+    const size_t m = plan.size();
+    const size_t n = plan[0].size();
+
+    std::cout << "           ";
+    for (size_t j = 0; j < n; ++j)
+        std::cout << std::format("B{:2d} ", j + 1);
+    std::cout << "Supply\n";
+
+    for (size_t i = 0; i < m; ++i) {
+        std::cout << std::format("Supplier {:2d}: ", i + 1);
+        double row_sum = 0.0;
+
+        for (size_t j = 0; j < n; ++j) {
+            const double val = plan[i][j];
+            row_sum += val;
+            if (val > 1e-9) {
+                std::cout << std::format("{:5.2f}* ", val);
+            } else {
+                std::cout << "  .    ";
+            }
+        }
+        std::cout << std::format(" | {:6.2f}", row_sum);
+        if (i < supplies.size()) {
+            std::cout << std::format(" (avail: {:.2f})", supplies[i]);
+        }
+        std::cout << "\n";
+    }
+
+    std::cout << "Demand:    ";
+    for (size_t j = 0; j < n; ++j) {
+        double col_sum = 0.0;
+        for (size_t i = 0; i < m; ++i) col_sum += plan[i][j];
+        std::cout << std::format("{:5.2f} ", col_sum);
+    }
+    std::cout << "\n";
+
+    std::cout << std::string(60, '-') << "\n";
+}
+
+// ==================== Вывод задачи ====================
+
+void TransportProblem::print(const std::string& title) const {
+    std::cout << "\n" << std::string(60, '=') << "\n";
+    std::cout << "  " << title << "\n";
+    std::cout << std::string(60, '=') << "\n";
+
+    std::cout << "Поставщики (" << numSuppliers() << "): ";
+    for (double s : supplies_) std::cout << std::format("{:.2f} ", s);
+
+    std::cout << "\nПотребители (" << numConsumers() << "): ";
+    for (double d : demands_) std::cout << std::format("{:.2f} ", d);
+
+    std::cout << "\nСуммарный запас: " << totalSupply()
+              << ", спрос: " << totalDemand()
+              << " [" << (isBalanced() ? "сбалансирована" : "НЕ сбалансирована") << "]\n";
+
+    if (hasPenalties()) {
+        std::cout << "\n📋 ШТРАФЫ ЗА НЕДОПОСТАВКУ:\n";
+        std::cout << "  Потребитель | Порог | Ставка | Макс.штраф\n";
+        std::cout << "  ------------|-------|--------|-----------\n";
+        for (size_t j = 0; j < demands_.size(); ++j) {
+            double max_penalty = demands_[j] * penalty_rates_->at(j);
+            std::cout << std::format("  B{:>2d}        | {:>5.0f} | {:>6.0f} | {:>9.2f}\n",
+                j+1, penalty_thresholds_->at(j), penalty_rates_->at(j), max_penalty);
+        }
+    }
+
+    std::cout << "\nМатрица стоимостей c[i][j]:\n";
+    std::cout << std::fixed << std::setprecision(2);
+    std::cout << "        ";
+    for (size_t j = 0; j < demands_.size(); ++j)
+        std::cout << "B" << std::setw(4) << j+1 << " ";
+    std::cout << "\n";
+
+    for (size_t i = 0; i < costs_.size(); ++i) {
+        std::cout << "A" << std::setw(2) << i+1 << ":   ";
+        for (double cost : costs_[i]) {
+            std::cout << std::setw(7) << cost << " ";
+        }
+        std::cout << "\n";
+    }
+    std::cout << std::string(60, '=') << "\n";
 }

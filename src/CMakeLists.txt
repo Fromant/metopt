@@ -25,10 +25,8 @@ add_library(lp
         linear/solvers/EnumSolver.cpp
         transport/TransportProblem.cpp
         transport/TransportProblem.hpp
-        transport/NorthwestCorner.cpp
-        transport/NorthwestCorner.hpp
-        transport/MODISolver.cpp
-        transport/MODISolver.hpp
+        transport/TransportSolver.cpp
+        transport/TransportSolver.hpp
 )
 
 target_include_directories(lp PUBLIC ./)

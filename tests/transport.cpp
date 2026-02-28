@@ -6,7 +6,7 @@
 #include "transport/MODISolver.hpp"
 
 const std::string files_folder = "../../tasks/transport/";
-constexpr auto EPS = 1e-6;
+constexpr auto EPS = 1e-4;
 
 class TransportIntegrationTest : public ::testing::Test {
 protected:

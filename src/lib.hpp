@@ -6,8 +6,6 @@
 
 #include "linear/LinearProgram.hpp"
 #include "linear/solvers/SimplexSolver.hpp"
-#include "transport/NorthwestCorner.hpp"
-#include "transport/TransportProblem.hpp"
 
 
 // Восстановление решения исходной задачи из канонической формы
@@ -115,32 +113,4 @@ inline void print_val_with_err(const double val1, const double val2) {
     std::cout << std::fixed << std::setprecision(precision) << avg << " +- " << err << std::endl;
     const double rel_err = (err / std::abs(avg)) * 100.0;
     std::cout << "Relative error: " << std::fixed << std::setprecision(2) << rel_err << " %" << std::endl;
-}
-
-inline auto solveTransportProblemWithSimplex(const TransportProblem& problem) {
-    // 1. Получаем начальный план через СЗУ
-    auto nwResult = NorthwestCorner::solve(problem, false);
-
-    // 2. Преобразуем задачу в ЛП
-    LinearProgram lp = problem.toLinearProgram();
-
-    // 3. Формируем начальный базис из результата СЗУ
-    std::vector<size_t> initialBasis;
-    for (const auto& [i, j] : nwResult.basis) {
-        initialBasis.push_back(i * problem.n + j); // индекс переменной x[i][j]
-    }
-
-    // 4. Запускаем симплекс с начальным базисом
-    auto simplexResult = SimplexSolver::solveWithInitialBasis(lp, initialBasis, true);
-
-    // 5. Восстанавливаем матрицу плана
-    auto optimalPlan = TransportProblem::restorePlanFromVector(simplexResult.x, problem.m, problem.n);
-
-    // 6. Вывод
-    std::cout << "\nOptimal plan (Simplex):" << std::endl;
-    TransportProblem::printPlan(optimalPlan);
-    const auto totalCost = problem.calculateCost(optimalPlan);
-    std::cout << "Total cost: " << problem.calculateCost(optimalPlan) << std::endl;
-
-    return std::make_pair(optimalPlan, totalCost);
 }

@@ -2,52 +2,69 @@
 
 #include <string>
 #include <vector>
-
-#include "../linear/LinearProgram.hpp"
+#include <optional>
+#include <iomanip>
+#include "linear/LinearProgram.hpp"
 
 class TransportProblem {
+private:
+    std::vector<double> supplies_;
+    std::vector<double> demands_;
+    std::vector<std::vector<double>> costs_;
+    std::optional<std::vector<double>> penalty_thresholds_;
+    std::optional<std::vector<double>> penalty_rates_;
+
+    void validate() const;
+
 public:
-    std::vector<double> supply; // Запасы поставщиков (a_i)
-    std::vector<double> demand; // Потребности потребителей (b_j)
-    std::vector<std::vector<double>> cost; // Матрица стоимостей (c_ij)
-    std::vector<double> demandPenalty; // Штраф за недопоставку для каждого потребителя
-    std::vector<double> demandThreshold; // Порог недопоставки для каждого потребителя
+    TransportProblem() = default;
 
-    size_t m; // Количество поставщиков
-    size_t n; // Количество потребителей
+    TransportProblem(std::vector<double> supplies,
+                     std::vector<double> demands,
+                     std::vector<std::vector<double>> costs);
 
-    TransportProblem() : m(0), n(0) {}
+    void setPenalties(std::vector<double> thresholds, std::vector<double> rates);
 
-    // Чтение из файла (формат: m n, затем a_1..a_m, затем b_1..b_n, затем матрица cost, затем штрафы, затем пороги)
-    static TransportProblem fromFile(const std::string& filename);
+    static TransportProblem readFromFile(const std::string& filename);
+    static TransportProblem readFromConsole();
 
-    // Чтение из консоли
-    static TransportProblem fromConsole();
+    [[nodiscard]] const auto& supplies() const { return supplies_; }
+    [[nodiscard]] const auto& demands() const { return demands_; }
+    [[nodiscard]] const auto& costs() const { return costs_; }
+    [[nodiscard]] const auto& penaltyThresholds() const { return penalty_thresholds_; }
+    [[nodiscard]] const auto& penaltyRates() const { return penalty_rates_; }
 
-    // Проверка корректности задачи
-    bool validate() const;
+    [[nodiscard]] size_t numSuppliers() const { return supplies_.size(); }
+    [[nodiscard]] size_t numConsumers() const { return demands_.size(); }
+    [[nodiscard]] bool hasPenalties() const {
+        return penalty_thresholds_.has_value() && penalty_rates_.has_value();
+    }
 
-    // Проверка сбалансированности
-    bool isBalanced(double eps = 1e-9) const;
+    [[nodiscard]] bool isBalanced(double epsilon = 1e-9) const;
+    [[nodiscard]] double totalSupply() const;
+    [[nodiscard]] double totalDemand() const;
 
-    // Балансировка с учетом порогов (добавляет фиктивного поставщика для недопоставки в пределах порога)
     TransportProblem balance() const;
+    [[nodiscard]] LinearProgram toLinearProgram() const;
+    [[nodiscard]] double calculatePenaltyCost(const std::vector<std::vector<double>>& shipments) const;
 
-    // Преобразование в задачу ЛП для симплекс-метода
-    LinearProgram toLinearProgram() const;
-
-    // Вывод задачи
     void print(const std::string& title = "Transport Problem") const;
 
-    // Вывод плана перевозок
-    static void printPlan(const std::vector<std::vector<double>>& plan);
+    // Static helpers
+    [[nodiscard]] static std::vector<std::vector<double>> restorePlanFromVector(
+        const std::vector<double>& lp_solution,
+        size_t original_m, size_t original_n,
+        size_t balanced_m, size_t balanced_n,
+        bool has_penalties);
 
-    // Подсчёт общей стоимости (включая штрафы за недопоставку сверх порога)
-    double calculateCost(const std::vector<std::vector<double>>& plan) const;
+    [[nodiscard]] static bool validatePlan(
+        const std::vector<std::vector<double>>& plan,
+        const std::vector<double>& supplies,
+        const std::vector<double>& demands,
+        double epsilon = 1e-6);
 
-    /**
-     * Восстановить матрицу плана из вектора решения (формат: x[i*n + j])
-     */
-    static std::vector<std::vector<double>> restorePlanFromVector(const std::vector<double>& x_vector, size_t m,
-                                                                  size_t n);
+    static void printPlan(const std::vector<std::vector<double>>& plan,
+                         const std::vector<double>& supplies,
+                         const std::vector<double>& demands,
+                         const std::string& title = "Transportation Plan");
 };
