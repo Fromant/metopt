@@ -1,9 +1,9 @@
 #pragma once
 
+#include <iomanip>
+#include <optional>
 #include <string>
 #include <vector>
-#include <optional>
-#include <iomanip>
 #include "linear/LinearProgram.hpp"
 
 class TransportProblem {
@@ -19,9 +19,7 @@ private:
 public:
     TransportProblem() = default;
 
-    TransportProblem(std::vector<double> supplies,
-                     std::vector<double> demands,
-                     std::vector<std::vector<double>> costs);
+    TransportProblem(std::vector<double> supplies, std::vector<double> demands, std::vector<std::vector<double>> costs);
 
     void setPenalties(std::vector<double> thresholds, std::vector<double> rates);
 
@@ -36,35 +34,28 @@ public:
 
     [[nodiscard]] size_t numSuppliers() const { return supplies_.size(); }
     [[nodiscard]] size_t numConsumers() const { return demands_.size(); }
-    [[nodiscard]] bool hasPenalties() const {
-        return penalty_thresholds_.has_value() && penalty_rates_.has_value();
-    }
+    [[nodiscard]] bool hasPenalties() const { return penalty_thresholds_.has_value() && penalty_rates_.has_value(); }
 
     [[nodiscard]] bool isBalanced(double epsilon = 1e-9) const;
     [[nodiscard]] double totalSupply() const;
     [[nodiscard]] double totalDemand() const;
 
-    TransportProblem balance() const;
+    [[nodiscard]] TransportProblem balance() const;
     [[nodiscard]] LinearProgram toLinearProgram() const;
     [[nodiscard]] double calculatePenaltyCost(const std::vector<std::vector<double>>& shipments) const;
 
     void print(const std::string& title = "Transport Problem") const;
 
     // Static helpers
-    [[nodiscard]] static std::vector<std::vector<double>> restorePlanFromVector(
-        const std::vector<double>& lp_solution,
-        size_t original_m, size_t original_n,
-        size_t balanced_m, size_t balanced_n,
-        bool has_penalties);
+    [[nodiscard]] static std::vector<std::vector<double>> restorePlanFromVector(const std::vector<double>& lp_solution,
+                                                                                size_t original_m, size_t original_n,
+                                                                                size_t balanced_m, size_t balanced_n,
+                                                                                bool has_penalties);
 
-    [[nodiscard]] static bool validatePlan(
-        const std::vector<std::vector<double>>& plan,
-        const std::vector<double>& supplies,
-        const std::vector<double>& demands,
-        double epsilon = 1e-6);
+    [[nodiscard]] static bool validatePlan(const std::vector<std::vector<double>>& plan,
+                                           const std::vector<double>& supplies, const std::vector<double>& demands,
+                                           double epsilon = 1e-6);
 
-    static void printPlan(const std::vector<std::vector<double>>& plan,
-                         const std::vector<double>& supplies,
-                         const std::vector<double>& demands,
-                         const std::string& title = "Transportation Plan");
+    static void printPlan(const std::vector<std::vector<double>>& plan, const std::vector<double>& supplies,
+                          const std::vector<double>& demands, const std::string& title = "Transportation Plan");
 };
