@@ -8,30 +8,18 @@
 #include "transport/TransportProblem.hpp"
 #include "transport/TransportSolver.hpp"
 
-// ==================== Константы ====================
-
 const std::string TASKS_FOLDER = "../../tasks/transport/";
 constexpr auto EPS = 1e-6; // Допуск для сравнения cost (симплекс vs MODI)
 constexpr auto EPS_PLAN = 1e-4; // Допуск для сравнения плана перевозок
 
-// ==================== Вспомогательные функции ====================
-
-/**
- * Сравнивает решения MODI и Simplex: стоимость и план перевозок
- */
 void CompareSolutions(const TransportProblem& problem, const TransportSolution& modi_result,
-                      const TransportSolution& simplex_result, double cost_eps = EPS,
-                      double plan_eps = EPS_PLAN) {
-    // 1. Сравниваем целевые функции
+                      const TransportSolution& simplex_result, double cost_eps = EPS) {
     EXPECT_NEAR(modi_result.total_cost, simplex_result.total_cost, cost_eps)
         << "Cost mismatch: MODI=" << modi_result.total_cost << ", Simplex=" << simplex_result.total_cost;
-
-    // 4. Валидируем план simplex
-    // EXPECT_TRUE(TransportProblem::validatePlan(simplex_result.shipments, problem.supplies(), problem.demands()));
 }
 
 /**
- * Создаёт простую тестовую задачу 3x3 без пенальти
+ * Создаёт простую тестовую задачу 3x3 без штрафов
  */
 TransportProblem CreateSimple3x3() {
     return TransportProblem({10, 20, 30}, // supplies
@@ -40,7 +28,7 @@ TransportProblem CreateSimple3x3() {
 }
 
 /**
- * Создаёт задачу 4x4 с пенальти
+ * Создаёт задачу 4x4 с штрафоми
  */
 TransportProblem Create4x4WithPenalties() {
     TransportProblem problem({15, 20, 25, 10}, {10, 20, 25, 15},
@@ -50,8 +38,6 @@ TransportProblem Create4x4WithPenalties() {
     );
     return problem;
 }
-
-// ==================== UNIT TESTS: TransportProblem ====================
 
 TEST(TransportProblemTest, Constructor_Valid) {
     TransportProblem problem({10, 20}, {15, 15}, {{1, 2}, {3, 4}});
@@ -184,8 +170,6 @@ TEST(TransportProblemTest, ValidatePlan_InvalidSupply) {
     EXPECT_FALSE(TransportProblem::validatePlan(plan, supplies, demands));
 }
 
-// ==================== UNIT TESTS: TransportSolver ====================
-
 TEST(TransportSolverTest, NorthwestCorner_Basic) {
     TransportProblem problem = CreateSimple3x3();
 
@@ -245,9 +229,6 @@ TEST(TransportSolverTest, FullSolve_WithPenalties) {
 
     // Общая стоимость = транспорт + штрафы
     EXPECT_NEAR(result.total_cost, result.transportation_cost + result.penalty_cost, EPS);
-
-    // Проверка что план валидный
-    // EXPECT_TRUE(TransportProblem::validatePlan(result.shipments, problem.supplies(), problem.demands()));
 }
 
 // ==================== INTEGRATION TESTS: MODI vs Simplex ====================
@@ -255,8 +236,8 @@ TEST(TransportSolverTest, FullSolve_WithPenalties) {
 TEST(IntegrationTest, Simple3x3_MODI_vs_Simplex) {
     TransportProblem problem = CreateSimple3x3();
 
-    const auto modiRes = solve_with_modi(problem);
-    const auto simplexRes = solve_with_simplex(problem);
+    const auto modiRes = solve_transport_with_modi(problem);
+    const auto simplexRes = solve_transport_with_simplex(problem);
 
     ASSERT_TRUE(simplexRes.has_value());
 
@@ -268,8 +249,8 @@ TEST(IntegrationTest, Balanced5x5_MODI_vs_Simplex) {
 
     TransportProblem problem = TransportProblem::readFromFile(filename);
 
-    const auto modiRes = solve_with_modi(problem);
-    const auto simplexRes = solve_with_simplex(problem);
+    const auto modiRes = solve_transport_with_modi(problem);
+    const auto simplexRes = solve_transport_with_simplex(problem);
 
     ASSERT_TRUE(simplexRes.has_value());
 
@@ -281,8 +262,8 @@ TEST(IntegrationTest, Balanced5x5_MODI_vs_Simplex_penalties) {
 
     TransportProblem problem = TransportProblem::readFromFile(filename);
 
-    const auto modiRes = solve_with_modi(problem);
-    const auto simplexRes = solve_with_simplex(problem);
+    const auto modiRes = solve_transport_with_modi(problem);
+    const auto simplexRes = solve_transport_with_simplex(problem);
 
     ASSERT_TRUE(simplexRes.has_value());
 
@@ -292,8 +273,8 @@ TEST(IntegrationTest, Balanced5x5_MODI_vs_Simplex_penalties) {
 TEST(IntegrationTest, WithPenalties_MODI_vs_Simplex) {
     TransportProblem problem = Create4x4WithPenalties();
 
-    const auto modiRes = solve_with_modi(problem);
-    const auto simplexRes = solve_with_simplex(problem);
+    const auto modiRes = solve_transport_with_modi(problem);
+    const auto simplexRes = solve_transport_with_simplex(problem);
 
     ASSERT_TRUE(simplexRes.has_value());
 

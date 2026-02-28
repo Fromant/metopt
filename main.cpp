@@ -17,8 +17,6 @@ void print_usage(const char* program_name) {
     std::cout << "If no filename is provided, reads from console." << std::endl;
 }
 
-
-
 // void demonstrate_cycle(const TransportProblem& problem) {
 //     std::cout << "\n========== CYCLE DEMONSTRATION ==========" << std::endl;
 //
@@ -93,9 +91,10 @@ int main(int argc, char* argv[]) {
     }
     std::cout << "Balanced: " << (problem.isBalanced() ? "Yes" : "No") << std::endl;
 
-    solve_with_modi(problem, true, verbose);
+    // solve_transport_with_modi(problem, true, verbose);
+    // solve_transport_with_simplex(problem, true, verbose);
 
-    solve_with_simplex(problem, true, verbose);
+    solve_transport_problem(problem, true, verbose);
 
     if (verbose) {
         // demonstrate_cycle(problem);

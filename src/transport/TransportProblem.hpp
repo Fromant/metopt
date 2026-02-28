@@ -7,7 +7,6 @@
 #include "linear/LinearProgram.hpp"
 
 class TransportProblem {
-private:
     std::vector<double> supplies_;
     std::vector<double> demands_;
     std::vector<std::vector<double>> costs_;
@@ -47,7 +46,6 @@ public:
 
     void print(const std::string& title = "Transport Problem") const;
 
-    // Static helpers
     [[nodiscard]] static std::vector<std::vector<double>> restorePlanFromVector(const std::vector<double>& lp_solution,
                                                                                 size_t original_m, size_t original_n,
                                                                                 size_t expanded_m, size_t expanded_n);

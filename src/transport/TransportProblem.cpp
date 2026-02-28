@@ -4,8 +4,8 @@
 #include <fstream>
 #include <iostream>
 #include <numeric>
-#include <stdexcept>
 #include <optional>
+#include <stdexcept>
 
 // ==================== Конструктор и валидация ====================
 
@@ -104,8 +104,6 @@ double TransportProblem::calculatePenaltyCost(const std::vector<std::vector<doub
     return total_penalty;
 }
 
-// ==================== Создание расширенной задачи (статический метод) ====================
-
 TransportProblem TransportProblem::createExpandedProblem(const TransportProblem& original) {
     if (!original.hasPenalties()) {
         return original.balance(); // если штрафов нет, просто балансируем
@@ -153,8 +151,6 @@ TransportProblem TransportProblem::createExpandedProblem(const TransportProblem&
     return {supplies, demands, costs};
 }
 
-// ==================== Чтение из файла ====================
-
 TransportProblem TransportProblem::readFromFile(const std::string& filename) {
     std::ifstream file(filename);
     if (!file.is_open()) {
@@ -193,8 +189,6 @@ TransportProblem TransportProblem::readFromFile(const std::string& filename) {
 
     return problem;
 }
-
-// ==================== Чтение с консоли ====================
 
 TransportProblem TransportProblem::readFromConsole() {
     std::cout << "=== Ввод транспортной задачи ===\n";
@@ -251,7 +245,6 @@ TransportProblem TransportProblem::readFromConsole() {
     return problem;
 }
 
-// ==================== Преобразование в ЛП ====================
 LinearProgram TransportProblem::toLinearProgram() const {
     const size_t m = numSuppliers();
     const size_t n = numConsumers();
@@ -289,20 +282,15 @@ LinearProgram TransportProblem::toLinearProgram() const {
 
     std::vector<std::string> var_constraints(num_vars, ">=0");
 
-    auto lp = LinearProgram(true, std::move(objective), std::move(constraints),
-                            std::move(relations), std::move(rhs),
+    auto lp = LinearProgram(true, std::move(objective), std::move(constraints), std::move(relations), std::move(rhs),
                             std::move(var_constraints));
     lp.prettierCoeffs();
     return lp;
 }
 
-// ==================== Восстановление плана из LP ====================
-
-std::vector<std::vector<double>> TransportProblem::restorePlanFromVector(
-    const std::vector<double>& lp_solution,
-    size_t original_m, size_t original_n,
-    size_t expanded_m, size_t expanded_n)
-{
+std::vector<std::vector<double>> TransportProblem::restorePlanFromVector(const std::vector<double>& lp_solution,
+                                                                         size_t original_m, size_t original_n,
+                                                                         size_t expanded_m, size_t expanded_n) {
     std::vector<std::vector<double>> plan(original_m, std::vector<double>(original_n, 0.0));
     const size_t num_x_vars = expanded_m * expanded_n;
 
@@ -321,8 +309,6 @@ std::vector<std::vector<double>> TransportProblem::restorePlanFromVector(
 
     return plan;
 }
-
-// ==================== Валидация плана ====================
 
 bool TransportProblem::validatePlan(const std::vector<std::vector<double>>& plan, const std::vector<double>& supplies,
                                     const std::vector<double>& demands, double epsilon) {
@@ -356,8 +342,6 @@ bool TransportProblem::validatePlan(const std::vector<std::vector<double>>& plan
     return true;
 }
 
-// ==================== Вывод плана ====================
-
 void TransportProblem::printPlan(const std::vector<std::vector<double>>& plan, const std::vector<double>& supplies,
                                  const std::vector<double>& demands, const std::string& title) {
     std::cout << "\n" << std::string(60, '-') << "\n";
@@ -373,9 +357,9 @@ void TransportProblem::printPlan(const std::vector<std::vector<double>>& plan, c
     const size_t m = plan.size();
     const size_t n = plan[0].size();
 
-    std::cout << "           ";
+    std::cout << "             ";
     for (size_t j = 0; j < n; ++j)
-        std::cout << std::format("B{:2d} ", j + 1);
+        std::cout << std::format("B{:2d}     ", j + 1);
     std::cout << "Supply\n";
 
     for (size_t i = 0; i < m; ++i) {
@@ -398,19 +382,17 @@ void TransportProblem::printPlan(const std::vector<std::vector<double>>& plan, c
         std::cout << "\n";
     }
 
-    std::cout << "Demand:    ";
+    std::cout << "Demand:      ";
     for (size_t j = 0; j < n; ++j) {
         double col_sum = 0.0;
         for (size_t i = 0; i < m; ++i)
             col_sum += plan[i][j];
-        std::cout << std::format("{:5.2f} ", col_sum);
+        std::cout << std::format("{:5.2f}  ", col_sum);
     }
     std::cout << "\n";
 
     std::cout << std::string(60, '-') << "\n";
 }
-
-// ==================== Вывод задачи ====================
 
 void TransportProblem::print(const std::string& title) const {
     std::cout << "\n" << std::string(60, '=') << "\n";
@@ -429,7 +411,7 @@ void TransportProblem::print(const std::string& title) const {
               << (isBalanced() ? "сбалансирована" : "НЕ сбалансирована") << "]\n";
 
     if (hasPenalties()) {
-        std::cout << "\n📋 ШТРАФЫ ЗА НЕДОПОСТАВКУ:\n";
+        std::cout << "\nШТРАФЫ ЗА НЕДОПОСТАВКУ:\n";
         std::cout << "  Потребитель | Порог | Ставка | Макс.штраф\n";
         std::cout << "  ------------|-------|--------|-----------\n";
         for (size_t j = 0; j < demands_.size(); ++j) {

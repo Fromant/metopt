@@ -4,13 +4,13 @@
 #include <random>
 #include <vector>
 
+#include "linear/DualBuilder.hpp"
 #include "linear/LinearProgram.hpp"
 #include "linear/solvers/SimplexSolver.hpp"
 #include "transport/TransportProblem.hpp"
 #include "transport/TransportSolver.hpp"
 
 
-// Восстановление решения исходной задачи из канонической формы
 inline std::vector<double> restore_original_solution(const LinearProgram& original_lp,
                                                      const std::vector<double>& canonical_solution) {
     const int n_orig = original_lp.num_variables();
@@ -102,6 +102,20 @@ inline Eigen::MatrixXd std_to_eigen(const std::vector<std::vector<double>>& m) {
     return result;
 }
 
+inline auto get_val_with_err(const double val1, const double val2) {
+    double err = std::abs(val1 - val2) / 2;
+    double avg = (val1 + val2) / 2;
+
+    const double exponent = std::floor(std::log10(err));
+    // Разряд последней значащей цифры погрешности: -exponent
+    const auto precision = std::clamp(-exponent, 4.0, 10.0);
+    const double factor = std::pow(10.0, -precision - 1); // Сохраняем 2 значащие цифры
+    err = std::round(err / factor) * factor;
+    avg = std::round(avg / factor) * factor;
+
+    return std::make_tuple(avg, err, precision);
+}
+
 inline void print_val_with_err(const double val1, const double val2) {
     double err = std::abs(val1 - val2) / 2;
     double avg = (val1 + val2) / 2;
@@ -117,8 +131,24 @@ inline void print_val_with_err(const double val1, const double val2) {
     std::cout << "Relative error: " << std::fixed << std::setprecision(2) << rel_err << " %" << std::endl;
 }
 
-inline TransportSolution solve_with_modi(const TransportProblem& problem, bool printSolution = false,
-                                         bool verbose = false) {
+inline std::optional<std::tuple<double, double, double>>
+solve_lp_simplex(const LinearProgram& lp, bool printSolution = false, bool verbose = false) {
+    const auto directSolution = SimplexSolver::solve(lp, verbose);
+
+    const auto dualProblem = DualBuilder::build_dual(lp);
+
+    const auto dualSolution = SimplexSolver::solve(dualProblem, verbose);
+
+    if (!directSolution.is_feasible || !dualSolution.is_feasible || directSolution.is_unbounded ||
+        dualSolution.is_unbounded) {
+        return std::nullopt;
+    }
+
+    return get_val_with_err(directSolution.objective_value, dualSolution.objective_value);
+}
+
+inline TransportSolution solve_transport_with_modi(const TransportProblem& problem, bool printSolution = false,
+                                                   bool verbose = false) {
     if (verbose) {
         std::cout << "\n========== MODI METHOD ==========" << std::endl;
     }
@@ -137,8 +167,8 @@ inline TransportSolution solve_with_modi(const TransportProblem& problem, bool p
     return result;
 }
 
-inline std::optional<TransportSolution> solve_with_simplex(const TransportProblem& original_problem,
-                                                           bool printSolution = false, bool verbose = false) {
+inline std::optional<TransportSolution> solve_transport_with_simplex(const TransportProblem& original_problem,
+                                                                     bool printSolution = false, bool verbose = false) {
     if (verbose) {
         printSolution = true;
     }
@@ -189,14 +219,26 @@ inline std::optional<TransportSolution> solve_with_simplex(const TransportProble
                                     "Optimal Transportation Plan (Simplex)");
     }
 
-    // 6. Валидация: сравнение с методом потенциалов (опционально)
-    if (verbose) {
-        auto potentials_result = TransportSolver::solve(original_problem, false);
-        std::cout << "\n=== Comparison ===" << std::endl;
-        std::cout << "Simplex cost:    " << result.objective_value << "\n";
-        std::cout << "Potentials cost: " << potentials_result.total_cost << "\n";
-        std::cout << "Difference:      " << std::abs(result.objective_value - potentials_result.total_cost) << "\n";
-    }
-
     return TransportSolution{plan, {}, result.objective_value, result.objective_value, 0, true, 0, {}};
+}
+
+inline std::optional<double> solve_transport_problem(const TransportProblem& original_problem,
+                                                     bool printSolution = false, bool verbose = false) {
+    const auto sol1 = solve_transport_with_modi(original_problem, printSolution, verbose);
+    const auto sol2_opt = solve_transport_with_simplex(original_problem, printSolution, verbose);
+    if (!sol2_opt) {
+        return std::nullopt;
+    }
+    const auto sol2 = *sol2_opt;
+
+    const auto [avg, err, precision] = get_val_with_err(sol1.total_cost, sol2.total_cost);
+    if (printSolution) {
+        std::cout << "\n=== Comparison ===" << std::endl;
+        std::cout << "NWA + potentials cost:    " << sol1.total_cost << "\n";
+        std::cout << "Simplex cost: " << sol2.total_cost << "\n";
+        std::cout << "Final average cost: " << std::fixed << std::setprecision(precision) << avg << " +- " << err
+                  << std::endl;
+        std::cout << "Relative error: " << std::fixed << std::setprecision(2) << err / avg << std::endl;
+    }
+    return avg;
 }
