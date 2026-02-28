@@ -51,13 +51,13 @@ private:
 
     static bool findImprovingCell(const TransportProblem& problem, const std::vector<double>& u,
                                   const std::vector<double>& v, const TransportSolution& solution, size_t& out_i,
-                                  size_t& out_j, double& out_delta, bool verbose);
+                                  size_t& out_j, double& out_delta, bool& out_is_penalty, bool verbose);
 
     static bool findCycle(const TransportSolution& solution, size_t start_i, size_t start_j,
-                          std::vector<std::pair<size_t, size_t>>& cycle);
+                          std::vector<std::pair<size_t, size_t>>& cycle, bool is_penalty_entering);
 
     static void redistributeAlongCycle(TransportSolution& solution, const std::vector<std::pair<size_t, size_t>>& cycle,
-                                       double theta);
+                                       double theta, bool is_penalty_entering);
 
     static void log(const std::string& message, std::vector<std::string>* log_ptr, bool verbose);
 };
