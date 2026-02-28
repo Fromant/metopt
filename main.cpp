@@ -2,6 +2,7 @@
 #include <iostream>
 #include <string>
 
+#include "lib.hpp"
 #include "linear/solvers/SimplexSolver.hpp"
 #include "transport/TransportProblem.hpp"
 #include "transport/TransportSolver.hpp"
@@ -16,78 +17,7 @@ void print_usage(const char* program_name) {
     std::cout << "If no filename is provided, reads from console." << std::endl;
 }
 
-void solve_with_modi(const TransportProblem& problem, bool verbose) {
-    std::cout << "\n========== MODI METHOD ==========" << std::endl;
 
-    if (!problem.isBalanced()) {
-        std::cout << "Problem is not balanced. Balancing..." << std::endl;
-    }
-
-    TransportProblem balanced = problem.balance();
-    if (verbose) {
-        balanced.print("Balanced Problem");
-    }
-
-    auto result = TransportSolver::solve(problem, verbose);
-
-    result.print("Итоговый план");
-}
-
-void solve_with_simplex(const TransportProblem& original_problem, bool verbose) {
-    std::cout << "\n========== SIMPLEX METHOD ==========" << std::endl;
-
-    TransportProblem expanded = TransportProblem::createExpandedProblem(original_problem);
-    LinearProgram lp = expanded.toLinearProgram();
-
-    if (verbose) {
-        lp.print("LP form of transport problem");
-    }
-
-    auto result = SimplexSolver::solve(lp, false);
-
-    if (!result.is_feasible) {
-        std::cout << "ERROR: Problem is infeasible" << std::endl;
-        return;
-    }
-
-    if (result.is_unbounded) {
-        std::cout << "ERROR: Problem is unbounded" << std::endl;
-        return;
-    }
-
-    if (!result.is_optimal) {
-        std::cout << "WARNING: Solution is not optimal" << std::endl;
-    }
-
-    auto plan = TransportProblem::restorePlanFromVector(result.x,
-    original_problem.numSuppliers(),
-    original_problem.numConsumers(),
-    expanded.numSuppliers(),
-    expanded.numConsumers());
-
-    // 5. Вывод результатов
-    std::cout << "\n=== Simplex Solution ===" << std::endl;
-    std::cout << std::fixed << std::setprecision(2);
-    std::cout << "Objective value: " << result.objective_value << "\n";
-    std::cout << "Basis size: " << result.basis.size() << "\n";
-
-    // Печатаем план перевозок
-    TransportProblem::printPlan(
-        plan,
-        original_problem.supplies(),
-        original_problem.demands(),
-        "Optimal Transportation Plan (Simplex)"
-    );
-
-    // 6. Валидация: сравнение с методом потенциалов (опционально)
-    if (verbose) {
-        auto potentials_result = TransportSolver::solve(original_problem, false);
-        std::cout << "\n=== Comparison ===" << std::endl;
-        std::cout << "Simplex cost:    " << result.objective_value << "\n";
-        std::cout << "Potentials cost: " << potentials_result.total_cost << "\n";
-        std::cout << "Difference:      " << std::abs(result.objective_value - potentials_result.total_cost) << "\n";
-    }
-}
 
 // void demonstrate_cycle(const TransportProblem& problem) {
 //     std::cout << "\n========== CYCLE DEMONSTRATION ==========" << std::endl;
@@ -163,9 +93,9 @@ int main(int argc, char* argv[]) {
     }
     std::cout << "Balanced: " << (problem.isBalanced() ? "Yes" : "No") << std::endl;
 
-    solve_with_modi(problem, verbose);
+    solve_with_modi(problem, true, verbose);
 
-    solve_with_simplex(problem, verbose);
+    solve_with_simplex(problem, true, verbose);
 
     if (verbose) {
         // demonstrate_cycle(problem);
