@@ -1,34 +1,34 @@
-# C++ Class Structure for Optimization Algorithms
+# Структура классов C++ для алгоритмов оптимизации
 
-## Overall Architecture
+## Общая архитектура
 
 ```
 project_root/
 ├── CMakeLists.txt
 ├── src/
-│   ├── main.cpp                 # Entry point with command-line interface
-│   ├── function.hpp             # Target function definition
-│   ├── function.cpp             # Target function implementation
-│   ├── optimizer_base.hpp       # Abstract base class for optimizers
-│   ├── golden_section.hpp       # Golden section optimizer declaration
-│   ├── golden_section.cpp       # Golden section optimizer implementation
-│   ├── uniform_search.hpp       # Uniform search optimizer declaration
-│   └── uniform_search.cpp       # Uniform search optimizer implementation
+│   ├── main.cpp                 # Точка входа с командным интерфейсом
+│   ├── function.hpp             # Определение целевой функции
+│   ├── function.cpp             # Реализация целевой функции
+│   ├── optimizer_base.hpp       # Абстрактный базовый класс для оптимизаторов
+│   ├── golden_section.hpp       # Объявление оптимизатора методом золотого сечения
+│   ├── golden_section.cpp       # Реализация оптимизатора методом золотого сечения
+│   ├── uniform_search.hpp       # Объявление оптимизатора равномерного поиска
+│   └── uniform_search.cpp       # Реализация оптимизатора равномерного поиска
 ├── include/
-│   └── (public headers)
+│   └── (публичные заголовки)
 ├── tests/
 │   ├── CMakeLists.txt
-│   ├── test_main.cpp            # GoogleTest main
-│   ├── test_golden_section.cpp  # Tests for golden section method
-│   ├── test_uniform_search.cpp  # Tests for uniform search method
-│   └── test_function.cpp        # Tests for target function
-├── docs/                       # Documentation files
-└── plots/                      # Output directory for plots
+│   ├── test_main.cpp            # Основной модуль GoogleTest
+│   ├── test_golden_section.cpp  # Тесты для метода золотого сечения
+│   ├── test_uniform_search.cpp  # Тесты для метода равномерного поиска
+│   └── test_function.cpp        # Тесты для целевой функции
+├── docs/                       # Файлы документации
+└── plots/                      # Выходной каталог для графиков
 ```
 
-## Class Hierarchy
+## Иерархия классов
 
-### 1. Function Class
+### 1. Класс Function
 ```cpp
 // function.hpp
 class Function {
@@ -40,7 +40,7 @@ public:
 ```
 
 ```cpp
-// Implementation for f(x) = x² - 2x - 2cos(x)
+// Реализация для f(x) = x² - 2x - 2cos(x)
 class TargetFunction : public Function {
 public:
     double operator()(double x) const override;
@@ -48,14 +48,14 @@ public:
 };
 ```
 
-### 2. Abstract Optimizer Base Class
+### 2. Абстрактный базовый класс оптимизатора
 ```cpp
 // optimizer_base.hpp
 struct OptimizationResult {
-    double min_x;           // x-value at minimum
-    double min_value;       // function value at minimum
-    int num_evaluations;    // number of function evaluations
-    double final_interval_width; // width of final interval
+    double min_x;           // x-значение в минимуме
+    double min_value;       // значение функции в минимуме
+    int num_evaluations;    // количество вычислений функции
+    double final_interval_width; // ширина конечного интервала
 };
 
 class OptimizerBase {
@@ -78,7 +78,7 @@ public:
 };
 ```
 
-### 3. Golden Section Optimizer
+### 3. Оптимизатор методом золотого сечения
 ```cpp
 // golden_section.hpp
 class GoldenSectionOptimizer : public OptimizerBase {
@@ -95,12 +95,12 @@ public:
 };
 ```
 
-### 4. Uniform Search Optimizer
+### 4. Оптимизатор равномерного поиска
 ```cpp
 // uniform_search.hpp
 class UniformSearchOptimizer : public OptimizerBase {
 private:
-    int points_per_iteration; // configurable number of points per iteration
+    int points_per_iteration; // настраиваемое количество точек на итерацию
 
 public:
     explicit UniformSearchOptimizer(int points = 5);
@@ -114,23 +114,23 @@ public:
 };
 ```
 
-## Main Application Structure
+## Структура основного приложения
 ```cpp
 // main.cpp
 int main(int argc, char* argv[]) {
-    // Parse command line arguments for precision
-    // Create target function
-    // Run both optimization methods
-    // Compare results with theoretical predictions
-    // Display results
+    // Разбор аргументов командной строки для точности
+    // Создание целевой функции
+    // Запуск обоих методов оптимизации
+    // Сравнение результатов с теоретическими предсказаниями
+    // Отображение результатов
     return 0;
 }
 ```
 
-## Testing Structure
-Each component will have corresponding unit tests using GoogleTest:
-- Test the target function implementation
-- Test the golden section algorithm with known functions
-- Test the uniform search algorithm with known functions
-- Test edge cases and error conditions
-- Verify iteration counts match theoretical expectations
+## Структура тестирования
+Каждый компонент будет иметь соответствующие модульные тесты с использованием GoogleTest:
+- Тестирование реализации целевой функции
+- Тестирование алгоритма золотого сечения с известными функциями
+- Тестирование алгоритма равномерного поиска с известными функциями
+- Тестирование граничных случаев и условий ошибок
+- Проверка соответствия количества итераций теоретическим ожиданиям

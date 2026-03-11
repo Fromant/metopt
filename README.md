@@ -1,67 +1,67 @@
-# One-Dimensional Optimization Methods
+# Методы одномерной оптимизации
 
-This project implements and compares two classical methods for one-dimensional optimization: the golden section search and uniform search methods. The goal is to find the minimum of a unimodal function within a given interval.
+Этот проект реализует и сравнивает два классических метода одномерной оптимизации: метод поиска золотого сечения и метод равномерного поиска. Цель заключается в нахождении минимума унимодальной функции на заданном интервале.
 
-## Implemented Methods
+## Реализованные методы
 
-### 1. Golden Section Search
-- Based on the golden ratio (φ ≈ 1.618) for optimal interval reduction
-- Guarantees convergence for unimodal functions
-- Requires 2 initial function evaluations, then 1 per iteration
-- Reduces search interval by factor ρ ≈ 0.618 each iteration
+### 1. Поиск методом золотого сечения
+- Основан на золотом сечении (φ ≈ 1.618) для оптимального сокращения интервала
+- Гарантирует сходимость для унимодальных функций
+- Требует 2 начальных вычисления функции, затем 1 на итерацию
+- Сокращает интервал поиска в ρ ≈ 0.618 раз на каждой итерации
 
-### 2. Uniform Search
-- Evaluates the function at uniformly spaced points in the interval
-- Selects the subinterval containing the minimum point
-- Configurable number of points per iteration (default: 5)
-- More robust but generally requires more function evaluations
+### 2. Равномерный поиск
+- Вычисляет функцию в равномерно расположенных точках интервала
+- Выбирает подинтервал, содержащий точку минимума
+- Настраиваемое количество точек на итерацию (по умолчанию: 5)
+- Более устойчив, но обычно требует больше вычислений функции
 
-## Target Function
+## Целевая функция
 
-The optimization problem addresses the function:
+Задача оптимизации касается функции:
 ```
 f(x) = x² - 2x - 2cos(x)
 ```
-on the interval [0.5, 1.0].
+на интервале [0.5, 1.0].
 
-This function is unimodal in the specified interval, making it suitable for both optimization methods.
+Эта функция унимодальна на указанном интервале, что делает ее подходящей для обоих методов оптимизации.
 
-## Project Structure
+## Структура проекта
 
 ```
-├── CMakeLists.txt              # Build configuration
-├── README.md                   # This file
-├── docs/                       # Documentation
-│   ├── golden_section_method.md # Golden section algorithm details
-│   ├── uniform_search_method.md # Uniform search algorithm details
-│   ├── precision_formula.md     # Theoretical formulas
-│   ├── class_structure.md       # C++ class design
-│   └── method_comparison.md     # Method comparison analysis
-├── src/                        # Source code
-│   ├── main.cpp               # Main application
-│   ├── function.hpp/cpp       # Target function definition
-│   ├── optimizer_base.hpp     # Base optimizer class
-│   ├── golden_section.hpp/cpp # Golden section implementation
-│   └── uniform_search.hpp/cpp # Uniform search implementation
-├── tests/                      # Unit tests
-│   ├── test_main.cpp          # Test runner
-│   ├── test_function.cpp      # Function tests
-│   ├── test_golden_section.cpp # Golden section tests
-│   └── test_uniform_search.cpp # Uniform search tests
-└── plots/                      # Plotting utilities
-    ├── generate_plot_data.cpp # Data generation for plots
-    └── plot_function.py       # Visualization script
+├── CMakeLists.txt              # Конфигурация сборки
+├── README.md                   # Этот файл
+├── docs/                       # Документация
+│   ├── golden_section_method.md # Подробности алгоритма золотого сечения
+│   ├── uniform_search_method.md # Подробности алгоритма равномерного поиска
+│   ├── precision_formula.md     # Теоретические формулы
+│   ├── class_structure.md       # Проектирование классов C++
+│   └── method_comparison.md     # Анализ сравнения методов
+├── src/                        # Исходный код
+│   ├── main.cpp               # Главное приложение
+│   ├── function.hpp/cpp       # Определение целевой функции
+│   ├── optimizer_base.hpp     # Базовый класс оптимизатора
+│   ├── golden_section.hpp/cpp # Реализация метода золотого сечения
+│   └── uniform_search.hpp/cpp # Реализация метода равномерного поиска
+├── tests/                      # Модульные тесты
+│   ├── test_main.cpp          # Запуск тестов
+│   ├── test_function.cpp      # Тесты функции
+│   ├── test_golden_section.cpp # Тесты метода золотого сечения
+│   └── test_uniform_search.cpp # Тесты метода равномерного поиска
+└── plots/                      # Утилиты построения графиков
+    ├── generate_plot_data.cpp # Генерация данных для графиков
+    └── plot_function.py       # Скрипт визуализации
 ```
 
-## Building and Running
+## Сборка и запуск
 
-### Prerequisites
-- C++17 compatible compiler
-- CMake 3.10 or higher
-- Python 3 (for visualization)
-- Matplotlib (for visualization)
+### Предварительные требования
+- Совместимый с C++17 компилятор
+- CMake 3.10 или выше
+- Python 3 (для визуализации)
+- Matplotlib (для визуализации)
 
-### Build Instructions
+### Инструкции по сборке
 ```bash
 mkdir build
 cd build
@@ -69,71 +69,71 @@ cmake ..
 make
 ```
 
-### Running the Application
+### Запуск приложения
 ```bash
 ./metopt
 ```
 
-### Running Tests
+### Запуск тестов
 ```bash
 ./tests
 ```
 
-### Generating Plots
+### Генерация графиков
 ```bash
-# Generate plot data
+# Генерация данных для графиков
 ./plot_generator
 
-# Create visualization
+# Создание визуализации
 python plots/plot_function.py
 ```
 
-## Results and Analysis
+## Результаты и анализ
 
-The application outputs results for three precision levels: 0.1, 0.01, and 0.001.
+Приложение выводит результаты для трех уровней точности: 0.1, 0.01 и 0.001.
 
-### Theoretical Predictions
+### Теоретические предсказания
 
-For golden section search:
-- Number of iterations needed: n ≥ ln(|b₀ - a₀| / ε) / ln(φ)
-- Where φ ≈ 1.618 is the golden ratio
+Для метода золотого сечения:
+- Необходимое количество итераций: n ≥ ln(|b₀ - a₀| / ε) / ln(φ)
+- Где φ ≈ 1.618 - золотое сечение
 
-For uniform search (with k points per iteration):
-- Number of iterations needed: n ≥ ln(|b₀ - a₀| / ε) / ln(k-1)
+Для равномерного поиска (с k точками на итерацию):
+- Необходимое количество итераций: n ≥ ln(|b₀ - a₀| / ε) / ln(k-1)
 
-### Performance Comparison
+### Сравнение производительности
 
-The implementation tracks function evaluations to compare actual performance with theoretical predictions. Key metrics include:
-- Number of function evaluations
-- Final interval width
-- Computed minimum value and location
-- Comparison with theoretical iteration counts
+Реализация отслеживает вычисления функции для сравнения фактической производительности с теоретическими предсказаниями. Ключевые метрики включают:
+- Количество вычислений функции
+- Конечная ширина интервала
+- Вычисленное минимальное значение и его местоположение
+- Сравнение с теоретическими количествами итераций
 
-## Key Findings
+## Ключевые выводы
 
-1. **Golden Section Search** typically requires fewer function evaluations for high precision requirements
-2. **Uniform Search** may be more robust for functions with noise or irregularities
-3. Both methods successfully find the minimum of the target function in the specified interval
-4. The function f(x) = x² - 2x - 2cos(x) is confirmed to be unimodal in [0.5, 1.0]
+1. **Метод золотого сечения** обычно требует меньше вычислений функции для высоких требований к точности
+2. **Равномерный поиск** может быть более устойчивым для функций с шумом или нерегулярностями
+3. Оба метода успешно находят минимум целевой функции на указанном интервале
+4. Функция f(x) = x² - 2x - 2cos(x) подтверждена как унимодальная на [0.5, 1.0]
 
-## When to Use Each Method
+## Когда использовать каждый метод
 
-### Golden Section Search is Preferred When:
-- Function evaluations are expensive
-- High precision is required
-- The function is known to be unimodal
-- Maximum efficiency in terms of function evaluations is needed
+### Метод золотого сечения предпочтителен, когда:
+- Вычисления функции дороги
+- Требуется высокая точность
+- Известно, что функция унимодальна
+- Требуется максимальная эффективность в терминах вычислений функции
 
-### Uniform Search is Preferred When:
-- Function evaluations are relatively cheap
-- The function may have noise or irregularities
-- Parallel computation is available
-- Exploring function behavior across the interval is important
+### Равномерный поиск предпочтителен, когда:
+- Вычисления функции относительно дешевы
+- Функция может содержать шум или нерегулярности
+- Доступны параллельные вычисления
+- Важно исследование поведения функции на интервале
 
-## Mathematical Analysis
+## Математический анализ
 
-The project includes theoretical analysis of the relationship between required precision and number of iterations for both methods, with formulas derived and implemented for comparison with experimental results.
+Проект включает теоретический анализ взаимосвязи между требуемой точностью и количеством итераций для обоих методов, с формулами, выведенными и реализованными для сравнения с экспериментальными результатами.
 
-## Visualization
+## Визуализация
 
-The project includes tools to visualize the target function and demonstrate its unimodal property in the optimization interval, confirming the applicability of both methods.
+Проект включает инструменты для визуализации целевой функции и демонстрации ее унимодального свойства на интервале оптимизации, подтверждая применимость обоих методов.

@@ -4,7 +4,7 @@
 #include "optimizer_base.hpp"
 
 /**
- * @brief Optimizer using the golden section search method
+ * @brief Оптимизатор, использующий метод золотого сечения
  */
 class GoldenSectionOptimizer : public OptimizerBase {
 private:
@@ -13,17 +13,17 @@ private:
 
 public:
     /**
-     * @brief Minimize the given function using golden section search
-     * @param func Function to minimize
-     * @param a Left boundary of the interval
-     * @param b Right boundary of the interval
-     * @param epsilon Required precision
-     * @return OptimizationResult containing the results
+     * @brief Минимизировать данную функцию методом золотого сечения
+     * @param func Функция для минимизации
+     * @param a Левая граница интервала
+     * @param b Правая граница интервала
+     * @param epsilon Требуемая точность
+     * @return OptimizationResult, содержащий результаты
      */
     OptimizationResult minimize(
         const Function& func,
-        double a, 
-        double b, 
+        double a,
+        double b,
         double epsilon
     ) override;
 };

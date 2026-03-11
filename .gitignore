@@ -4,3 +4,5 @@ build/
 .idea
 .cache
 CMakePresets.json
+.*
+*.png

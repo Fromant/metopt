@@ -4,31 +4,31 @@
 #include "optimizer_base.hpp"
 
 /**
- * @brief Optimizer using the uniform search method
+ * @brief Оптимизатор, использующий метод равномерного поиска
  */
 class UniformSearchOptimizer : public OptimizerBase {
 private:
-    int points_per_iteration;  ///< Number of points to evaluate per iteration
+    int points_per_iteration;  ///< Количество точек, вычисляемых за итерацию
 
 public:
     /**
-     * @brief Constructor
-     * @param points Number of points to use per iteration (default: 5)
+     * @brief Конструктор
+     * @param points Количество точек, используемых за итерацию (по умолчанию: 5)
      */
     explicit UniformSearchOptimizer(int points = 5);
-    
+
     /**
-     * @brief Minimize the given function using uniform search
-     * @param func Function to minimize
-     * @param a Left boundary of the interval
-     * @param b Right boundary of the interval
-     * @param epsilon Required precision
-     * @return OptimizationResult containing the results
+     * @brief Минимизировать данную функцию методом равномерного поиска
+     * @param func Функция для минимизации
+     * @param a Левая граница интервала
+     * @param b Правая граница интервала
+     * @param epsilon Требуемая точность
+     * @return OptimizationResult, содержащий результаты
      */
     OptimizationResult minimize(
         const Function& func,
-        double a, 
-        double b, 
+        double a,
+        double b,
         double epsilon
     ) override;
 };

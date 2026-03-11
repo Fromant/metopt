@@ -1,77 +1,77 @@
-# Comparison of Golden Section Search and Uniform Search Methods
+# Сравнение методов поиска золотого сечения и равномерного поиска
 
-## Computational Efficiency Analysis
+## Анализ вычислительной эффективности
 
-### Golden Section Search
+### Метод золотого сечения
 
-#### Advantages:
-1. **Optimal reduction rate**: Each iteration reduces the search interval by factor ρ ≈ 0.618
-2. **Efficient function evaluations**: After the initial 2 evaluations, only 1 new evaluation per iteration
-3. **Predictable behavior**: Consistent interval reduction rate regardless of function shape
-4. **Mathematical optimality**: Proven to be optimal for reducing interval size with minimal function evaluations
+#### Преимущества:
+1. **Оптимальная скорость сокращения**: Каждая итерация уменьшает интервал поиска в ρ ≈ 0.618 раз
+2. **Эффективные вычисления функции**: После начальных 2 вычислений только 1 новое вычисление на итерацию
+3. **Предсказуемое поведение**: Постоянная скорость сокращения интервала независимо от формы функции
+4. **Математическая оптимальность**: Доказано, что является оптимальным для уменьшения размера интервала с минимальными вычислениями функции
 
-#### Disadvantages:
-1. **Requires unimodal function**: Will not work correctly if function has multiple local minima in the interval
-2. **Fixed reduction rate**: Cannot take advantage of favorable function shapes
-3. **Sensitive to numerical precision**: May have issues with very high precision requirements due to floating-point limitations
+#### Недостатки:
+1. **Требует унимодальной функции**: Не будет работать правильно, если функция имеет несколько локальных минимумов на интервале
+2. **Фиксированная скорость сокращения**: Не может использовать благоприятные формы функций
+3. **Чувствителен к числовой точности**: Может иметь проблемы с очень высокими требованиями к точности из-за ограничений с плавающей запятой
 
-#### Best Use Cases:
-- When function evaluations are expensive
-- When guaranteed convergence is required
-- When the function is known to be unimodal
-- When seeking maximum efficiency in terms of function evaluations
+#### Лучшие случаи использования:
+- Когда вычисления функции дороги
+- Когда требуется гарантированная сходимость
+- Когда известно, что функция унимодальная
+- Когда требуется максимальная эффективность в терминах вычислений функции
 
-### Uniform Search
+### Равномерный поиск
 
-#### Advantages:
-1. **Robustness**: Less sensitive to function irregularities
-2. **Multiple sampling**: Provides insight into function behavior across the interval
-3. **Parallelizable**: Function evaluations at different points can be done in parallel
-4. **Flexibility**: Can adapt to different function behaviors by adjusting number of points
+#### Преимущества:
+1. **Устойчивость**: Менее чувствителен к нерегулярностям функции
+2. **Множественная выборка**: Даёт представление о поведении функции на интервале
+3. **Параллелизуемость**: Вычисления функции в разных точках могут выполняться параллельно
+4. **Гибкость**: Может адаптироваться к различному поведению функции за счёт изменения количества точек
 
-#### Disadvantages:
-1. **Higher function evaluations**: Requires k evaluations per iteration (where k is number of points)
-2. **Slower convergence**: Generally requires more iterations than golden section
-3. **Parameter dependency**: Performance heavily depends on choice of number of points per iteration
+#### Недостатки:
+1. **Больше вычислений функции**: Требует k вычислений на итерацию (где k - количество точек)
+2. **Медленная сходимость**: Обычно требует больше итераций, чем метод золотого сечения
+3. **Зависимость от параметров**: Производительность сильно зависит от выбора количества точек на итерацию
 
-#### Best Use Cases:
-- When function evaluations are relatively cheap
-- When function may have noise or irregularities
-- When parallel computation is available
-- When exploring function behavior is important
+#### Лучшие случаи использования:
+- Когда вычисления функции относительно дешёвы
+- Когда функция может иметь шум или нерегулярности
+- Когда доступны параллельные вычисления
+- Когда важно исследование поведения функции
 
-## Theoretical Comparison for f(x) = x² - 2x - 2cos(x)
+## Теоретическое сравнение для f(x) = x² - 2x - 2cos(x)
 
-### Function Properties:
-- Domain: [0.5, 1.0]
-- The function f(x) = x² - 2x - 2cos(x) is unimodal in this interval
-- Derivative: f'(x) = 2x - 2 + 2sin(x)
-- Second derivative: f''(x) = 2 + 2cos(x) ≥ 0 (since cos(x) ≥ -1), confirming convexity/local unimodality
+### Свойства функции:
+- Область определения: [0.5, 1.0]
+- Функция f(x) = x² - 2x - 2cos(x) унимодальна на этом интервале
+- Производная: f'(x) = 2x - 2 + 2sin(x)
+- Вторая производная: f''(x) = 2 + 2cos(x) ≥ 0 (поскольку cos(x) ≥ -1), подтверждает выпуклость/локальную унимодальность
 
-### Expected Performance:
+### Ожидаемая производительность:
 
-For precision ε:
-- Golden Section: n ≥ ln((b-a)/ε) / ln(φ) ≈ ln(0.5/ε) / 0.4812
-- Uniform Search (k points): n ≥ ln((b-a)/ε) / ln(k-1)
+Для точности ε:
+- Метод золотого сечения: n ≥ ln((b-a)/ε) / ln(φ) ≈ ln(0.5/ε) / 0.4812
+- Равномерный поиск (k точек): n ≥ ln((b-a)/ε) / ln(k-1)
 
-For our test precisions:
-- ε = 0.1: GS needs ~3.32 iterations, US(5) needs ~1.16 iterations (but 5× more evals per iter)
-- ε = 0.01: GS needs ~8.19 iterations, US(5) needs ~2.86 iterations
-- ε = 0.001: GS needs ~13.07 iterations, US(5) needs ~4.57 iterations
+Для наших тестовых точностей:
+- ε = 0.1: ЗС требует ~3.32 итераций, РП(5) требует ~1.16 итераций (но в 5 раз больше вычислений на итерацию)
+- ε = 0.01: ЗС требует ~8.19 итераций, РП(5) требует ~2.86 итераций
+- ε = 0.001: ЗС требует ~13.07 итераций, РП(5) требует ~4.57 итераций
 
-### Practical Considerations:
+### Практические соображения:
 
-1. **For high precision requirements**: Golden section is typically more efficient
-2. **For rough approximations**: Uniform search might be competitive
-3. **For noisy functions**: Uniform search provides better robustness
-4. **For expensive function evaluations**: Golden section is preferred
+1. **Для высоких требований к точности**: Метод золотого сечения обычно более эффективен
+2. **Для грубых приближений**: Равномерный поиск может быть конкурентоспособным
+3. **Для шумных функций**: Равномерный поиск обеспечивает лучшую устойчивость
+4. **Для дорогих вычислений функции**: Предпочтительнее метод золотого сечения
 
-## Experimental Results Expected:
+## Ожидаемые экспериментальные результаты:
 
-Based on the theoretical analysis, we expect:
-- Golden section to require fewer total function evaluations
-- Uniform search to potentially converge in fewer iterations but with higher cost per iteration
-- Both methods to successfully find the minimum in the specified interval
-- The actual performance difference to depend on the specific function characteristics
+На основе теоретического анализа мы ожидаем:
+- Метод золотого сечения потребует меньше общего количества вычислений функции
+- Равномерный поиск может сходиться за меньшее количество итераций, но с более высокой стоимостью на итерацию
+- Оба метода успешно найдут минимум на указанном интервале
+- Фактическая разница в производительности будет зависеть от конкретных характеристик функции
 
-The implementation includes counters for function evaluations to validate these theoretical expectations.
+Реализация включает счетчики для вычислений функции, чтобы проверить эти теоретические ожидания.

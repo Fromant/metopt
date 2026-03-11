@@ -4,55 +4,55 @@
 #include "function.hpp"
 
 /**
- * @brief Structure to hold optimization results
+ * @brief Структура для хранения результатов оптимизации
  */
 struct OptimizationResult {
-    double min_x;                ///< x-value at minimum
-    double min_value;            ///< function value at minimum
-    int num_evaluations;         ///< number of function evaluations
-    double final_interval_width; ///< width of final interval
+    double min_x;                ///< x-значение в точке минимума
+    double min_value;            ///< значение функции в точке минимума
+    int num_evaluations;         ///< количество вычислений функции
+    double final_interval_width; ///< ширина конечного интервала
 };
 
 /**
- * @brief Abstract base class for optimization algorithms
+ * @brief Абстрактный базовый класс для алгоритмов оптимизации
  */
 class OptimizerBase {
 protected:
-    int evaluation_count;  ///< Counter for function evaluations
+    int evaluation_count;  ///< Счётчик вычислений функции
 
 public:
     OptimizerBase() : evaluation_count(0) {}
     virtual ~OptimizerBase() = default;
-    
+
     /**
-     * @brief Minimize the given function within the specified interval
-     * @param func Function to minimize
-     * @param a Left boundary of the interval
-     * @param b Right boundary of the interval
-     * @param epsilon Required precision
-     * @return OptimizationResult containing the results
+     * @brief Минимизировать данную функцию на указанном интервале
+     * @param func Функция для минимизации
+     * @param a Левая граница интервала
+     * @param b Правая граница интервала
+     * @param epsilon Требуемая точность
+     * @return OptimizationResult, содержащий результаты
      */
     virtual OptimizationResult minimize(
         const Function& func,
-        double a, 
-        double b, 
+        double a,
+        double b,
         double epsilon
     ) = 0;
-    
+
     /**
-     * @brief Get the number of function evaluations performed
-     * @return Number of function evaluations
+     * @brief Получить количество выполненных вычислений функции
+     * @return Количество вычислений функции
      */
     int get_evaluation_count() const { return evaluation_count; }
-    
+
     /**
-     * @brief Reset the evaluation counter
+     * @brief Сбросить счётчик вычислений
      */
     void reset_evaluation_count() { evaluation_count = 0; }
-    
+
 protected:
     /**
-     * @brief Increment the evaluation counter
+     * @brief Увеличить счётчик вычислений
      */
     void increment_evaluation_count() { evaluation_count++; }
 };

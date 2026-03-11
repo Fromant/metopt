@@ -4,27 +4,27 @@
 #include <string>
 
 /**
- * @brief Abstract base class for mathematical functions
+ * @brief Абстрактный базовый класс для математических функций
  */
 class Function {
 public:
     virtual ~Function() = default;
     /**
-     * @brief Evaluate the function at point x
-     * @param x Point at which to evaluate the function
-     * @return Function value at x
+     * @brief Вычислить функцию в точке x
+     * @param x Точка, в которой вычисляется функция
+     * @return Значение функции в x
      */
     virtual double operator()(double x) const = 0;
     
     /**
-     * @brief Get the name/description of the function
-     * @return Function name
+     * @brief Получить имя/описание функции
+     * @return Имя функции
      */
     virtual std::string name() const = 0;
 };
 
 /**
- * @brief Implementation of the target function: f(x) = x^2 - 2x - 2cos(x)
+ * @brief Реализация целевой функции: f(x) = x^2 - 2x - 2cos(x)
  */
 class TargetFunction : public Function {
 public:

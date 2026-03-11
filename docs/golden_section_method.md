@@ -1,44 +1,44 @@
-# Golden Section Search Algorithm
+# Алгоритм поиска методом золотого сечения
 
-## Overview
-The golden section search is a technique for finding the extremum (minimum or maximum) of a unimodal function by successively narrowing the range of values inside which the extremum is known to exist. The algorithm maintains the function values for three points whose distances form a golden ratio.
+## Обзор
+Метод золотого сечения — это техника нахождения экстремума (минимума или максимума) унимодальной функции путем последовательного сужения диапазона значений, внутри которого известно, что существует экстремум. Алгоритм сохраняет значения функции для трех точек, расстояния между которыми образуют золотое сечение.
 
-## Mathematical Foundation
-The golden ratio φ = (1 + √5)/2 ≈ 1.618, and we use ρ = φ - 1 = (√5 - 1)/2 ≈ 0.618.
+## Математическая основа
+Золотое сечение φ = (1 + √5)/2 ≈ 1.618, и мы используем ρ = φ - 1 = (√5 - 1)/2 ≈ 0.618.
 
-For minimization on interval [a, b]:
-- Two interior points are selected: 
+Для минимизации на интервале [a, b]:
+- Выбираются две внутренние точки:
   - x₁ = a + (1-ρ)(b-a)
   - x₂ = a + ρ(b-a)
-- Since ρ² = 1 - ρ, we have x₁ = a + ρ²(b-a) and x₂ = a + ρ(b-a)
+- Так как ρ² = 1 - ρ, имеем x₁ = a + ρ²(b-a) и x₂ = a + ρ(b-a)
 
-## Algorithm Steps
-1. Initialize interval [a₀, b₀] and tolerance ε
-2. Calculate initial points:
+## Шаги алгоритма
+1. Инициализировать интервал [a₀, b₀] и допустимую погрешность ε
+2. Рассчитать начальные точки:
    - d = ρ(b₀ - a₀)
    - x₁ = a₀ + d
    - x₂ = b₀ - d
-3. Evaluate f(x₁) and f(x₂)
-4. Iterate until |bₙ - aₙ| ≤ ε:
-   - If f(x₁) ≤ f(x₂):
-     - Set [aₙ₊₁, bₙ₊₁] = [aₙ, x₂]
-     - New x₂ = x₁, calculate new x₁
-   - Else:
-     - Set [aₙ₊₁, bₙ₊₁] = [x₁, bₙ]
-     - New x₁ = x₂, calculate new x₂
-5. Return midpoint of final interval as estimate
+3. Вычислить f(x₁) и f(x₂)
+4. Повторять до тех пор, пока |bₙ - aₙ| ≤ ε:
+   - Если f(x₁) ≤ f(x₂):
+     - Установить [aₙ₊₁, bₙ₊₁] = [aₙ, x₂]
+     - Новый x₂ = x₁, вычислить новый x₁
+   - Иначе:
+     - Установить [aₙ₊₁, bₙ₊₁] = [x₁, bₙ]
+     - Новый x₁ = x₂, вычислить новый x₂
+5. Вернуть середину конечного интервала в качестве оценки
 
-## Convergence Rate
-The interval width decreases by factor ρ each iteration:
+## Скорость сходимости
+Ширина интервала уменьшается в ρ раз за итерацию:
 - |bₙ - aₙ| = ρⁿ|b₀ - a₀|
-- Number of iterations needed: n ≥ log(ε/|b₀ - a₀|) / log(ρ)
+- Количество необходимых итераций: n ≥ log(ε/|b₀ - a₀|) / log(ρ)
 
-## Advantages
-- No derivative information required
-- Guaranteed convergence for unimodal functions
-- Efficient reduction of search interval
-- Equal functional evaluations per iteration (2 initial, then 1 per iteration)
+## Преимущества
+- Не требуется информация о производной
+- Гарантированная сходимость для унимодальных функций
+- Эффективное сокращение интервала поиска
+- Одинаковое количество вычислений функции за итерацию (2 начальных, затем 1 за итерацию)
 
-## Disadvantages
-- Requires function to be unimodal
-- Slower than Newton-type methods for smooth functions
+## Недостатки
+- Требует, чтобы функция была унимодальной
+- Медленнее, чем методы Ньютона для гладких функций
