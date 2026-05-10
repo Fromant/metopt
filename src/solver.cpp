@@ -379,26 +379,51 @@ std::vector<int> Solver::extract_primary_solution(const FixedState& full_state) 
 // ====================================================================
 
 LinearConstraints build_test1_constraints() {
-    // Test Case 1: n=7 (no auxiliary variables needed)
+    // Test Case 1: n=7 + 1 auxiliary variable = 8 total
     // Constraint 1: x0 - x1 - x2 <= 0  (if x0=1 then x1+x2 >= 1)
-    // Constraint 2: x0 + x1 + x2 <= 2  (at most 2 of first 3)
-    // These two constraints together yield optimal NPV=65 with {0,2,4,5,6}
+    // Constraint 2: if at least 1 from [1,3] then 2 from [4,6]
+    //   Using auxiliary z (index 7):
+    //   - z = indicator(x1+x2+x3 >= 1)
+    //   - x4 + x5 + x6 >= 2*z  =>  -x4 - x5 - x6 + 2*z <= 0
+    //   - z <= x1 + x2 + x3
+    //   - x1 + x2 + x3 - z <= 2  (ensures z=1 when sum >= 1)
 
     LinearConstraints lc;
-    lc.A.resize(2, std::vector<double>(7, 0.0));
-    lc.b.resize(2);
+    lc.A.resize(5, std::vector<double>(8, 0.0));
+    lc.b.resize(5);
 
-    // Row 0: x0 - x1 - x2 <= 0
+    // Row 0: x0 - x1 - x2 <= 0  (if x0 then x1+x2>=1)
     lc.A[0][0] = 1.0;
     lc.A[0][1] = -1.0;
     lc.A[0][2] = -1.0;
     lc.b[0] = 0.0;
 
-    // Row 1: x0 + x1 + x2 <= 2
-    lc.A[1][0] = 1.0;
-    lc.A[1][1] = 1.0;
-    lc.A[1][2] = 1.0;
-    lc.b[1] = 2.0;
+    // Row 1: -x4 - x5 - x6 + 2*z <= 0  (x4+x5+x6 >= 2*z)
+    lc.A[1][4] = -1.0;
+    lc.A[1][5] = -1.0;
+    lc.A[1][6] = -1.0;
+    lc.A[1][7] = 2.0;
+    lc.b[1] = 0.0;
+
+    // Row 2: -z + x1 + x2 + x3 <= 2  (z <= x1+x2+x3 when sum < 3)
+    lc.A[2][1] = 1.0;
+    lc.A[2][2] = 1.0;
+    lc.A[2][3] = 1.0;
+    lc.A[2][7] = -1.0;
+    lc.b[2] = 2.0;
+
+    // Row 3: z - x1 <= 0  (z <= x1)
+    lc.A[3][1] = -1.0;
+    lc.A[3][7] = 1.0;
+    lc.b[3] = 0.0;
+
+    // Row 4: z - x2 <= 0  (z <= x2)
+    lc.A[4][2] = -1.0;
+    lc.A[4][7] = 1.0;
+    lc.b[4] = 0.0;
+
+    // Note: Row 5 (z - x3 <= 0) is implied since we only need z <= sum,
+    // which is enforced by rows 3,4,2 and x1+x2+x3 <= 3
 
     return lc;
 }
@@ -426,7 +451,7 @@ TestCase make_test_case_1() {
     tc.costs = {1.5, 2.5, 3.5, 6.0, 7.0, 4.5, 3.0};
     tc.returns = {16.0, 8.0, 10.0, 13.5, 22.0, 10.0, 7.0};
     tc.constraints = build_test1_constraints();
-    tc.total_vars = 7;
+    tc.total_vars = 8;  // 7 primary + 1 auxiliary (z)
     tc.expected_npv = 66.5; // Optimal: {0,1,3,4,6} cost=20, return=66.5
     tc.expected_selection = {0, 1, 3, 4, 6};
     return tc;
