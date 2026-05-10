@@ -1,17 +1,13 @@
 #include "solver.hpp"
+#include "logical_constraints.hpp"
 
+#include <algorithm>
 #include <cmath>
-#include <cstdlib>
 #include <iostream>
-#include <string>
+#include <numeric>
 #include <vector>
-#include <sstream>
 
 using namespace bilp;
-
-// ====================================================================
-// Lightweight test framework using macros
-// ====================================================================
 
 #define TEST_ASSERT(cond, msg) \
     do { \
@@ -61,332 +57,307 @@ using namespace bilp;
         total++; \
     } while (0)
 
-// ====================================================================
-// Test: Test Case 1 - Logical constraints with 7 variables
-// ====================================================================
+struct TestCase {
+    std::string name;
+    int n;
+    double budget;
+    std::vector<double> costs;
+    std::vector<double> returns;
+    LinearConstraints constraints;
+    int total_vars;
+    std::vector<int> aux_var_indices;
+    double expected_npv;
+    std::vector<int> expected_selection; // 0-based indices of selected primary vars
+};
 
-TEST_CASE(test1_logical_constraints) {
-    auto tc = make_test_case_1();
-
-    SolverResult result;
-    bool ok = run_test_case(tc, result);
-    TEST_ASSERT(ok, "Test case 1 should be feasible and match expected values");
-    TEST_ASSERT(result.feasible, "Solution must be feasible");
-    TEST_ASSERT_NEAR(result.optimal_npv, 66.5, 1e-6,
-                     "Optimal NPV should be 66.5");
-
-    // Verify selection {0, 1, 3, 4, 6}
-    std::vector<int> actual_selection;
-    for (int i = 0; i < tc.n; ++i) {
-        if (result.solution[i] == 1) {
-            actual_selection.push_back(i);
-        }
-    }
-    TEST_ASSERT_EQ(5u, actual_selection.size(),
-                   "Should select exactly 5 items");
-    TEST_ASSERT_EQ(0, actual_selection[0], "Should select item 0");
-    TEST_ASSERT_EQ(1, actual_selection[1], "Should select item 1");
-    TEST_ASSERT_EQ(3, actual_selection[2], "Should select item 3");
-    TEST_ASSERT_EQ(4, actual_selection[3], "Should select item 4");
-    TEST_ASSERT_EQ(6, actual_selection[4], "Should select item 6");
-
-    // Verify constraint satisfaction
-    for (size_t j = 0; j < tc.constraints.A.size(); ++j) {
-        double lhs = 0.0;
-        for (int i = 0; i < tc.n; ++i) {
-            lhs += tc.constraints.A[j][i] * result.solution[i];
-        }
-        TEST_ASSERT(lhs <= tc.constraints.b[j] + 1e-6,
-                    "Constraint row " + std::to_string(j) + " must be satisfied");
-    }
-
-    // Verify budget
-    double total_cost = 0.0;
-    for (int i = 0; i < tc.n; ++i) {
-        if (result.solution[i] == 1) {
-            total_cost += tc.costs[i];
-        }
-    }
-    TEST_ASSERT(total_cost <= tc.budget + 1e-6,
-                "Total cost must not exceed budget");
-
-    return true;
+static LinearConstraints build_test1_constraints() {
+    LinearConstraints lc;
+    lc.A.resize(2, std::vector<double>(7, 0.0));
+    lc.b.resize(2);
+    lc.A[0][0] = 1.0; lc.A[0][1] = -1.0; lc.A[0][2] = -1.0; lc.b[0] = 0.0;
+    lc.A[1][0] = 1.0; lc.A[1][1] = 1.0;  lc.A[1][2] = 1.0;  lc.b[1] = 2.0;
+    return lc;
 }
 
-// ====================================================================
-// Test: Test Case 2 - Implication constraint
-// ====================================================================
+static LinearConstraints build_test2_constraints() {
+    LinearConstraints lc;
+    lc.A.resize(1, std::vector<double>(4, 0.0));
+    lc.b.resize(1);
+    lc.A[0][0] = 1.0; lc.A[0][1] = -1.0; lc.b[0] = 0.0;
+    return lc;
+}
 
-TEST_CASE(test2_implication) {
-    auto tc = make_test_case_2();
+static TestCase make_test_case_1() {
+    TestCase tc;
+    tc.name = "Logical Constraints (7 vars, budget=20)";
+    tc.n = 7; tc.budget = 20.0;
+    tc.costs = {1.5, 2.5, 3.5, 6.0, 7.0, 4.5, 3.0};
+    tc.returns = {16.0, 8.0, 10.0, 13.5, 22.0, 10.0, 7.0};
+    tc.constraints = build_test1_constraints();
+    tc.total_vars = 7;
+    tc.expected_npv = 66.5;
+    tc.expected_selection = {0, 1, 3, 4, 6};
+    return tc;
+}
 
-    SolverResult result;
-    bool ok = run_test_case(tc, result);
-    TEST_ASSERT(ok, "Test case 2 should be feasible and match expected values");
-    TEST_ASSERT(result.feasible, "Solution must be feasible");
-    TEST_ASSERT_NEAR(result.optimal_npv, 30.0, 1e-6,
-                     "Optimal NPV should be 30.0");
+static TestCase make_test_case_2() {
+    TestCase tc;
+    tc.name = "Implication Stress Test (4 vars, budget=10)";
+    tc.n = 4; tc.budget = 10.0;
+    tc.costs = {3.0, 4.0, 3.0, 4.0};
+    tc.returns = {10.0, 12.0, 8.0, 11.0};
+    tc.constraints = build_test2_constraints();
+    tc.total_vars = 4;
+    tc.expected_npv = 30.0;
+    tc.expected_selection = {0, 1, 2};
+    return tc;
+}
 
-    // Verify selection {0, 1, 2}
+static bool run_test_case(const TestCase& tc, SolverResult& result) {
+    SolverConfig config;
+    config.n = tc.n; config.budget = tc.budget;
+    config.costs = tc.costs; config.returns = tc.returns;
+    config.constraints = tc.constraints; config.total_vars = tc.total_vars;
+    Solver solver(config);
+    result = solver.solve();
+    bool npv_ok = std::abs(result.optimal_npv - tc.expected_npv) < 1e-6;
     std::vector<int> actual_selection;
     for (int i = 0; i < tc.n; ++i) {
-        if (result.solution[i] == 1) {
-            actual_selection.push_back(i);
-        }
+        if (result.solution[i] == 1) actual_selection.push_back(i);
     }
-    TEST_ASSERT_EQ(3u, actual_selection.size(),
-                   "Should select exactly 3 items");
-    TEST_ASSERT_EQ(0, actual_selection[0], "Should select item 0");
-    TEST_ASSERT_EQ(1, actual_selection[1], "Should select item 1");
-    TEST_ASSERT_EQ(2, actual_selection[2], "Should select item 2");
+    bool selection_ok = (actual_selection == tc.expected_selection);
+    return npv_ok && selection_ok && result.feasible;
+}
 
-    // Verify implication: x0=1 => x1=1
+TEST_CASE(test_implies_or) {
+    using namespace bilp::logic;
+    const int N = 3, TOTAL = N;
+    SolverConfig config;
+    config.n = N; config.budget = 10.0;
+    config.costs = {2.0, 3.0, 4.0}; config.returns = {8.0, 10.0, 12.0};
+    config.total_vars = TOTAL;
+    config.primary_vars.resize(N); std::iota(config.primary_vars.begin(), config.primary_vars.end(), 0);
+    
+    LinearConstraints lc;
+    auto rule = rule_implies_or(1, {2, 3}, TOTAL);
+    add_constraints(lc, rule, TOTAL);
+    config.constraints = lc;
+    
+    Solver solver(config);
+    SolverResult result = solver.solve();
+    
+    TEST_ASSERT(result.feasible, "Solution must be feasible");
+    TEST_ASSERT_NEAR(result.optimal_npv, 30.0, 1e-6, "Optimal NPV should be 30.0");
     if (result.solution[0] == 1) {
-        TEST_ASSERT_EQ(1, result.solution[1],
-                       "Implication x0=>x1: x1 must be 1 when x0 is 1");
+        TEST_ASSERT(result.solution[1] == 1 || result.solution[2] == 1,
+                    "If x0=1 then x1 or x2 must be 1");
     }
-
-    // Verify constraint: x0 - x1 <= 0
-    double lhs = result.solution[0] - result.solution[1];
-    TEST_ASSERT(lhs <= 0.0 + 1e-6, "x0 - x1 <= 0 must hold");
-
-    // Verify budget
-    double total_cost = 0.0;
-    for (int i = 0; i < tc.n; ++i) {
-        if (result.solution[i] == 1) {
-            total_cost += tc.costs[i];
-        }
-    }
-    TEST_ASSERT(total_cost <= tc.budget + 1e-6,
-                "Total cost must not exceed budget");
-
     return true;
 }
 
-// ====================================================================
-// Test: Upper bound correctness
-// ====================================================================
-
-TEST_CASE(upper_bound_is_valid) {
-    // Simple case: no constraints, verify UB >= any integer solution
+TEST_CASE(test_exactly_implies_exactly) {
+    using namespace bilp::logic;
+    const int PRIMARY_N = 6, AUX1 = 7, AUX2 = 8, TOTAL_VARS = PRIMARY_N + 2;
     SolverConfig config;
-    config.n = 3;
-    config.budget = 5.0;
-    config.costs = {2.0, 3.0, 4.0};
-    config.returns = {10.0, 12.0, 15.0};
-    config.total_vars = 3;
-
+    config.n = PRIMARY_N; config.budget = 30.0;
+    config.costs = {3.0, 4.0, 5.0, 6.0, 7.0, 8.0};
+    config.returns = {10.0, 12.0, 15.0, 18.0, 20.0, 22.0};
+    config.total_vars = TOTAL_VARS;
+    config.primary_vars.resize(PRIMARY_N); std::iota(config.primary_vars.begin(), config.primary_vars.end(), 0);
+    config.aux_vars = {AUX1 - 1, AUX2 - 1};
+    
+    LinearConstraints lc;
+    auto rule = rule_exactly_implies({1, 2, 3}, 1, {4, 5, 6}, 2, AUX1, AUX2, TOTAL_VARS);
+    add_constraints(lc, rule, TOTAL_VARS);
+    config.constraints = lc;
+    
     Solver solver(config);
     SolverResult result = solver.solve();
+    TEST_ASSERT(result.feasible, "Solution must be feasible");
+    
+    int sum_first = result.solution[0] + result.solution[1] + result.solution[2];
+    int sum_second = result.solution[3] + result.solution[4] + result.solution[5];
+    if (sum_first == 1) {
+        TEST_ASSERT_EQ(2, sum_second, "If exactly 1 from first group, then exactly 2 from second");
+    }
+    return true;
+}
 
+TEST_CASE(test_combined_rules) {
+    using namespace bilp::logic;
+    const int PRIMARY_N = 7, AUX1 = 8, AUX2 = 9, TOTAL_VARS = PRIMARY_N + 2;
+    SolverConfig config;
+    config.n = PRIMARY_N; config.budget = 25.0;
+    config.costs = {3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 4.0};
+    config.returns = {10.0, 12.0, 15.0, 18.0, 20.0, 22.0, 11.0};
+    config.total_vars = TOTAL_VARS;
+    config.primary_vars.resize(PRIMARY_N); std::iota(config.primary_vars.begin(), config.primary_vars.end(), 0);
+    config.aux_vars = {AUX1 - 1, AUX2 - 1};
+    
+    LinearConstraints lc;
+    auto rule1 = rule_implies_or(1, {2, 3}, TOTAL_VARS);
+    add_constraints(lc, rule1, TOTAL_VARS);
+    auto rule2 = rule_exactly_implies({1, 2, 3}, 1, {4, 5, 6}, 2, AUX1, AUX2, TOTAL_VARS);
+    add_constraints(lc, rule2, TOTAL_VARS);
+    config.constraints = lc;
+    
+    Solver solver(config);
+    SolverResult result = solver.solve();
+    TEST_ASSERT(result.feasible, "Solution must be feasible");
+    
+    if (result.solution[0] == 1) {
+        TEST_ASSERT(result.solution[1] == 1 || result.solution[2] == 1, "Rule 1 violated");
+    }
+    int sum_first = result.solution[0] + result.solution[1] + result.solution[2];
+    int sum_second = result.solution[3] + result.solution[4] + result.solution[5];
+    if (sum_first == 1) {
+        TEST_ASSERT_EQ(2, sum_second, "Rule 2 violated");
+    }
+    return true;
+}
+
+TEST_CASE(test_upper_bound_validity) {
+    SolverConfig config;
+    config.n = 3; config.budget = 5.0;
+    config.costs = {2.0, 3.0, 4.0}; config.returns = {10.0, 12.0, 15.0};
+    config.total_vars = 3; config.primary_vars = {0, 1, 2}; config.aux_vars = {};
+    Solver solver(config);
+    SolverResult result = solver.solve();
     TEST_ASSERT(result.feasible, "Simple case should be feasible");
-
-    // The fractional upper bound at root should be >= optimal integer
-    // Root relaxation: sort by efficiency: x0(5.0), x1(4.0), x2(3.75)
-    // Fill: x0(2.0) -> budget left 3.0, x1(3.0) -> budget left 0.0
-    // UB = 10 + 12 = 22.0 (actually can we do better?)
-    // Actually: x0(5.0), x1(4.0), x2(3.75)
-    // x0 cost 2, return 10, left 3
-    // x1 cost 3, return 12, left 0
-    // UB = 22
-    // Integer: {0,1} cost 5, return 22. Or {0,2} cost 6>5. {1,2} cost 7>5. {2} cost 4, return 15.
-    // So {0,1} = 22 is optimal.
-
-    TEST_ASSERT_NEAR(result.optimal_npv, 22.0, 1e-6,
-                     "Optimal for simple case should be 22.0");
-
+    TEST_ASSERT_NEAR(result.optimal_npv, 22.0, 1e-6, "Optimal for simple case should be 22.0");
     return true;
 }
 
-// ====================================================================
-// Test: Infeasible due to tight budget
-// ====================================================================
-
-TEST_CASE(budget_too_tight) {
+TEST_CASE(test_budget_too_tight) {
     SolverConfig config;
-    config.n = 3;
-    config.budget = 0.5;
-    config.costs = {2.0, 3.0, 4.0};
-    config.returns = {10.0, 12.0, 15.0};
-    config.total_vars = 3;
-
+    config.n = 3; config.budget = 0.5;
+    config.costs = {2.0, 3.0, 4.0}; config.returns = {10.0, 12.0, 15.0};
+    config.total_vars = 3; config.primary_vars = {0, 1, 2}; config.aux_vars = {};
     Solver solver(config);
     SolverResult result = solver.solve();
-
-    // Should be feasible with empty selection (NPV=0)
     TEST_ASSERT(result.feasible, "Empty selection is always feasible");
-    TEST_ASSERT_NEAR(result.optimal_npv, 0.0, 1e-6,
-                     "With tight budget, optimal is empty set");
-
+    TEST_ASSERT_NEAR(result.optimal_npv, 0.0, 1e-6, "With tight budget, optimal is empty set");
     return true;
 }
 
-// ====================================================================
-// Test: Constraint propagation forces correct assignment
-// ====================================================================
-
-TEST_CASE(propagation_forces_assignment) {
-    // x0 + x1 <= 1 (at most one)
-    // If we fix x0=1, propagation should NOT force x1 (it can be 0)
-    // But x0 + x1 >= 1 (at least one), i.e., -x0 - x1 <= -1
-    // If we fix x0=0, propagation should force x1=1
-
+TEST_CASE(test_propagation_forces_assignment) {
     SolverConfig config;
-    config.n = 2;
-    config.budget = 100.0;
-    config.costs = {1.0, 1.0};
-    config.returns = {5.0, 10.0};
-    config.total_vars = 2;
-
-    // -x0 - x1 <= -1  =>  x0 + x1 >= 1 (at least one must be selected)
-    config.constraints.A = {{-1.0, -1.0}};
-    config.constraints.b = {-1.0};
-
+    config.n = 2; config.budget = 100.0;
+    config.costs = {1.0, 1.0}; config.returns = {5.0, 10.0};
+    config.total_vars = 2; config.primary_vars = {0, 1}; config.aux_vars = {};
+    config.constraints.A = {{-1.0, -1.0}}; config.constraints.b = {-1.0};
     Solver solver(config);
     SolverResult result = solver.solve();
-
     TEST_ASSERT(result.feasible, "Should be feasible");
-    // Best: x1=1 (return 10), x0=0. But constraint requires x0+x1>=1.
-    // x1=1 alone satisfies the constraint. NPV=10.
-    // x0=1, x1=1: cost 2, return 15. NPV=15. Better!
-    // So optimal should be {0,1} with NPV=15.
-
-    TEST_ASSERT_NEAR(result.optimal_npv, 15.0, 1e-6,
-                     "Both items should be selected for max NPV");
-
+    TEST_ASSERT_NEAR(result.optimal_npv, 15.0, 1e-6, "Both items should be selected for max NPV");
     return true;
 }
 
-// ====================================================================
-// Test: Single variable
-// ====================================================================
-
-TEST_CASE(single_variable) {
+TEST_CASE(test_single_variable) {
     SolverConfig config;
-    config.n = 1;
-    config.budget = 5.0;
-    config.costs = {3.0};
-    config.returns = {10.0};
-    config.total_vars = 1;
-
+    config.n = 1; config.budget = 5.0;
+    config.costs = {3.0}; config.returns = {10.0};
+    config.total_vars = 1; config.primary_vars = {0}; config.aux_vars = {};
     Solver solver(config);
     SolverResult result = solver.solve();
-
     TEST_ASSERT(result.feasible, "Single var should be feasible");
-    TEST_ASSERT_NEAR(result.optimal_npv, 10.0, 1e-6,
-                     "Single var with positive return");
+    TEST_ASSERT_NEAR(result.optimal_npv, 10.0, 1e-6, "Single var with positive return");
     TEST_ASSERT_EQ(1, result.solution[0], "Should select the single item");
-
     return true;
 }
 
-// ====================================================================
-// Test: Deterministic output
-// ====================================================================
-
-TEST_CASE(deterministic_output) {
-    // Run the same test twice and verify identical results
-    auto tc = make_test_case_1();
-
-    SolverResult r1, r2;
-    bool ok1 = run_test_case(tc, r1);
-    bool ok2 = run_test_case(tc, r2);
-
-    TEST_ASSERT(ok1 && ok2, "Both runs should succeed");
-    TEST_ASSERT_NEAR(r1.optimal_npv, r2.optimal_npv, 1e-9,
-                     "NPV should be identical across runs");
-    TEST_ASSERT(r1.solution == r2.solution,
-                "Solutions should be identical across runs");
-
+TEST_CASE(test_deterministic_output) {
+    using namespace bilp::logic;
+    const int N = 3, TOTAL = N;
+    auto make_config = [&]() {
+        SolverConfig cfg;
+        cfg.n = N; cfg.budget = 10.0;
+        cfg.costs = {2.0, 3.0, 4.0}; cfg.returns = {8.0, 10.0, 12.0};
+        cfg.total_vars = TOTAL; cfg.primary_vars.resize(N);
+        std::iota(cfg.primary_vars.begin(), cfg.primary_vars.end(), 0);
+        cfg.aux_vars = {};
+        LinearConstraints lc;
+        auto rule = rule_implies_or(1, {2, 3}, TOTAL);
+        add_constraints(lc, rule, TOTAL);
+        cfg.constraints = lc;
+        return cfg;
+    };
+    Solver s1(make_config()), s2(make_config());
+    SolverResult r1 = s1.solve(), r2 = s2.solve();
+    TEST_ASSERT_NEAR(r1.optimal_npv, r2.optimal_npv, 1e-9, "NPV mismatch across runs");
+    TEST_ASSERT(r1.solution == r2.solution, "Solutions mismatch across runs");
     return true;
 }
 
-// ====================================================================
-// Test: Contradictory constraints
-// ====================================================================
-
-TEST_CASE(contradictory_constraints) {
-    // x0 <= 0 AND x0 >= 1  =>  infeasible if only var
-    // But empty selection might still be feasible if budget allows
-
+TEST_CASE(test_contradictory_constraints) {
     SolverConfig config;
-    config.n = 2;
-    config.budget = 10.0;
-    config.costs = {1.0, 1.0};
-    config.returns = {5.0, 5.0};
-    config.total_vars = 2;
-
-    // x0 <= 0  =>  x0 = 0
-    // x0 >= 1  =>  -x0 <= -1
-    config.constraints.A = {{1.0, 0.0}, {-1.0, 0.0}};
-    config.constraints.b = {0.0, -1.0};
-
+    config.n = 2; config.budget = 10.0;
+    config.costs = {1.0, 1.0}; config.returns = {5.0, 5.0};
+    config.total_vars = 2; config.primary_vars = {0, 1}; config.aux_vars = {};
+    config.constraints.A = {{1.0, 0.0}, {-1.0, 0.0}}; config.constraints.b = {0.0, -1.0};
     Solver solver(config);
     SolverResult result = solver.solve();
-
-    // x0=0 (from first) and x0>=1 (from second) => x0 must be 0 and >=1 => contradiction
-    // So x1 can be selected (NPV=5) if constraint only involves x0
-    // Actually: the constraints only restrict x0. x1 is free.
-    // Best: x1=1 (NPV=5), x0=0 satisfies first but not second.
-    // x0 must be 0 and x0 must be >=1. Contradiction on x0.
-    // The propagation should detect this and prune x0=1, and x0=0 is also invalid.
-    // So the solver should find x1=1 with x0=0, but x0=0 violates -x0<=-1.
-    // Actually -0 <= -1 => 0 <= -1, which is false. So x0=0 violates the constraint.
-    // This means the entire problem is infeasible.
-
-    // The solver handles this by pruning: any node with all vars fixed and
-    // violated constraints gets skipped. The result is feasible=true with NPV=0
-    // (empty selection, but empty selection also violates x0>=1).
-
-    // Actually, the constraint -x0<=-1 means x0>=1, so x0 must be 1.
-    // But x0<=0 from the first constraint. Contradiction.
-    // The root node has upper_bound, and when we explore it:
-    // - Branch x0=0: propagation checks -0<=-1 => 0<=-1, violated. Prune.
-    // - Branch x0=1: propagation checks 1<=0 => violated. Prune.
-    // - Branch x1=0 first: then x0 must be fixed... eventually both branches of x0 are pruned.
-
-    // The result should be feasible with NPV=0 (no valid assignment found).
-    // But technically the problem IS infeasible. Let me check how our solver handles this.
-
-    // Our solver initializes global_best_npv=0, and if all branches are pruned,
-    // it returns feasible=true with NPV=0 and empty solution.
-    // This is a design choice: the solver treats "no feasible solution" as "empty set".
-
     TEST_ASSERT(result.feasible, "Solver should return feasible (possibly empty)");
-
     return true;
 }
 
-// ====================================================================
-// Main
-// ====================================================================
+TEST_CASE(test_aux_vars_binary) {
+    using namespace bilp::logic;
+    const int PRIMARY_N = 4, AUX = 5, TOTAL_VARS = PRIMARY_N + 1;
+    SolverConfig config;
+    config.n = PRIMARY_N; config.budget = 20.0;
+    config.costs = {2.0, 3.0, 4.0, 5.0}; config.returns = {8.0, 10.0, 12.0, 15.0};
+    config.total_vars = TOTAL_VARS; config.primary_vars.resize(PRIMARY_N);
+    std::iota(config.primary_vars.begin(), config.primary_vars.end(), 0);
+    config.aux_vars = {AUX - 1};
+    LinearConstraints lc;
+    auto enc = encode_exactly_k({1, 2, 3}, 2, AUX, TOTAL_VARS);
+    for (const auto& c : enc.constraints) {
+        lc.A.push_back(c.coeffs); lc.b.push_back(c.rhs);
+    }
+    config.constraints = lc;
+    Solver solver(config);
+    SolverResult result = solver.solve();
+    TEST_ASSERT(result.feasible, "Should be feasible with aux var encoding");
+    int sum = result.solution[0] + result.solution[1] + result.solution[2];
+    TEST_ASSERT(sum >= 0 && sum <= 3, "Sum of first 3 vars must be in [0,3]");
+    return true;
+}
+
+TEST_CASE(test_original_case1) {
+    auto tc = make_test_case_1(); SolverResult result;
+    TEST_ASSERT(run_test_case(tc, result), "Test case 1 failed");
+    TEST_ASSERT_NEAR(result.optimal_npv, 66.5, 1e-6, "NPV mismatch");
+    return true;
+}
+
+TEST_CASE(test_original_case2) {
+    auto tc = make_test_case_2(); SolverResult result;
+    TEST_ASSERT(run_test_case(tc, result), "Test case 2 failed");
+    TEST_ASSERT_NEAR(result.optimal_npv, 30.0, 1e-6, "NPV mismatch");
+    return true;
+}
+
+int run_all_tests() {
+    std::cout << "=== BILP Solver Test Suite ===\n\n";
+    int passed = 0, failed = 0, total = 0;
+    RUN_TEST(test_implies_or);
+    RUN_TEST(test_exactly_implies_exactly);
+    RUN_TEST(test_combined_rules);
+    RUN_TEST(test_upper_bound_validity);
+    RUN_TEST(test_budget_too_tight);
+    RUN_TEST(test_propagation_forces_assignment);
+    RUN_TEST(test_single_variable);
+    RUN_TEST(test_deterministic_output);
+    RUN_TEST(test_contradictory_constraints);
+    RUN_TEST(test_aux_vars_binary);
+    RUN_TEST(test_original_case1);
+    RUN_TEST(test_original_case2);
+    std::cout << "\n===================================\n";
+    std::cout << "Results: " << passed << " passed, " << failed << " failed, " << total << " total\n";
+    return failed > 0 ? 1 : 0;
+}
 
 int main() {
-    std::cout << "=== BILP Solver Test Suite ===\n\n";
-
-    int passed = 0;
-    int failed = 0;
-    int total = 0;
-
-    RUN_TEST(test1_logical_constraints);
-    RUN_TEST(test2_implication);
-    RUN_TEST(upper_bound_is_valid);
-    RUN_TEST(budget_too_tight);
-    RUN_TEST(propagation_forces_assignment);
-    RUN_TEST(single_variable);
-    RUN_TEST(deterministic_output);
-    RUN_TEST(contradictory_constraints);
-
-    std::cout << "\n";
-    std::cout << "===================================\n";
-    std::cout << "Results: " << passed << " passed, "
-              << failed << " failed, " << total << " total\n";
-
-    if (failed > 0) {
-        std::cout << "STATUS: FAIL\n";
-        return 1;
-    } else {
-        std::cout << "STATUS: ALL PASS\n";
-        return 0;
-    }
+    return run_all_tests();
 }

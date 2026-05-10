@@ -92,45 +92,6 @@ private:
     std::vector<int> extract_primary_solution(const FixedState& full_state) const;
 };
 
-// ============================================================
-// Helper: build linear constraints from logical rules
-// ============================================================
-
-// Build constraints for Test Case 1:
-// Logical rules:
-//   R1: if x0 then (x1 or x2)
-//   R2: exactly one of {x0,x1,x2} is selected  (sum == 1)
-//   R3: exactly two of {x3,x4,x5} are selected (sum == 2)
-// Uses auxiliary variable z = indicator(sum{x0,x1,x2} == 1)
-// Returns LinearConstraints and total_vars (n + 1 auxiliary)
-LinearConstraints build_test1_constraints();
-
-// Build constraints for Test Case 2:
-// Logical rule: if x0 then x1  =>  x0 - x1 <= 0
-LinearConstraints build_test2_constraints();
-
-// ============================================================
-// Test runner utilities
-// ============================================================
-
-struct TestCase {
-    std::string name;
-    int n;
-    double budget;
-    std::vector<double> costs;
-    std::vector<double> returns;
-    LinearConstraints constraints;
-    int total_vars;
-    std::vector<int> aux_var_indices;
-    double expected_npv;
-    std::vector<int> expected_selection; // 0-based indices of selected primary vars
-};
-
-TestCase make_test_case_1();
-TestCase make_test_case_2();
-
-bool run_test_case(const TestCase& tc, SolverResult& result);
-
 } // namespace bilp
 
 #endif // BILP_SOLVER_HPP

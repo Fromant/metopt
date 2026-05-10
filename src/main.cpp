@@ -1,99 +1,119 @@
 #include "solver.hpp"
+#include "logical_constraints.hpp"
 
 #include <iostream>
-#include <iomanip>
-#include <string>
 #include <vector>
+#include <string>
+#include <sstream>
+#include <iomanip>
+#include <numeric>
 
 using namespace bilp;
 
-static void print_separator() {
-    std::cout << std::string(60, '-') << "\n";
-}
+int main() {
+    std::cout << "=== BILP Solver CLI ===\n\n";
 
-static void print_result(const std::string& name, const SolverResult& result,
-                         const TestCase& tc) {
-    print_separator();
-    std::cout << "Test: " << name << "\n";
-    print_separator();
+    int n;
+    std::cout << "Number of projects: ";
+    if (!(std::cin >> n) || n <= 0) { std::cerr << "Invalid.\n"; return 1; }
+    std::cin.ignore(32767, '\n');
 
+    double budget;
+    std::cout << "Budget: ";
+    if (!(std::cin >> budget)) { std::cerr << "Invalid.\n"; return 1; }
+    std::cin.ignore(32767, '\n');
+
+    std::vector<double> costs(n), returns(n);
+    std::cout << "Costs (space-separated): ";
+    for (int i = 0; i < n; ++i) std::cin >> costs[i];
+    std::cin.ignore(32767, '\n');
+
+    std::cout << "Returns (space-separated): ";
+    for (int i = 0; i < n; ++i) std::cin >> returns[i];
+    std::cin.ignore(32767, '\n');
+
+    int aux_count = 0;
+    std::cout << "Max auxiliary variables: ";
+    std::cin >> aux_count;
+    std::cin.ignore(32767, '\n');
+    int total_vars = n + aux_count;
+
+    SolverConfig config;
+    config.n = n; config.budget = budget;
+    config.costs = costs; config.returns = returns;
+    config.total_vars = total_vars;
+    config.primary_vars.resize(n);
+    std::iota(config.primary_vars.begin(), config.primary_vars.end(), 0);
+    config.aux_vars.reserve(aux_count);
+
+    LinearConstraints lc;
+    int next_aux = n + 1;
+
+    std::cout << "\nEnter constraints (type 'done' to finish):\n";
+    std::cout << "  implies <ant> <c1> <c2> ...\n";
+    std::cout << "  exactly <k1> <v1> <v2> ... -> <k2> <w1> <w2> ...\n";
+
+    std::string line;
+    while (std::getline(std::cin, line)) {
+        if (line.empty() || line == "done") break;
+        std::istringstream iss(line);
+        std::string cmd;
+        iss >> cmd;
+
+        if (cmd == "implies") {
+            int ant;
+            std::vector<int> cons;
+            if (!(iss >> ant)) { std::cout << "  Error: bad format\n"; continue; }
+            int v; while (iss >> v) cons.push_back(v);
+            auto rule = logic::rule_implies_or(ant, cons, total_vars);
+            logic::add_constraints(lc, rule, total_vars);
+        } else if (cmd == "exactly") {
+            int k1, k2;
+            std::vector<int> vars1, vars2;
+            if (!(iss >> k1)) { std::cout << "  Error: missing k1\n"; continue; }
+            std::string token;
+            bool arrow = false;
+            while (iss >> token && token != "->") {
+                try { vars1.push_back(std::stoi(token)); } catch(...) {}
+            }
+            if (token != "->") { std::cout << "  Error: missing '->'\n"; continue; }
+            if (!(iss >> k2)) { std::cout << "  Error: missing k2\n"; continue; }
+            while (iss >> token) {
+                try { vars2.push_back(std::stoi(token)); } catch(...) {}
+            }
+            if (vars1.empty() || vars2.empty()) { std::cout << "  Error: missing vars\n"; continue; }
+            if (next_aux + 1 > total_vars) { std::cout << "  Error: increase aux count\n"; continue; }
+            int aux1 = next_aux++, aux2 = next_aux++;
+            config.aux_vars.push_back(aux1 - 1); config.aux_vars.push_back(aux2 - 1);
+            auto rule = logic::rule_exactly_implies_exactly(vars1, k1, vars2, k2, aux1, aux2, total_vars);
+            logic::add_constraints(lc, rule, total_vars);
+        } else {
+            std::cout << "  Unknown command\n";
+        }
+    }
+
+    config.constraints = lc;
+
+    std::cout << "\nSolving...\n";
+    Solver solver(config);
+    SolverResult result = solver.solve();
+
+    std::cout << "\n=== Results ===\n";
     std::cout << "Feasible: " << (result.feasible ? "Yes" : "No") << "\n";
-    std::cout << "Optimal NPV: " << std::fixed << std::setprecision(2)
-              << result.optimal_npv << "\n";
-    std::cout << "Nodes explored: " << result.nodes_explored << "\n";
-
-    std::cout << "Selected items: ";
+    std::cout << "Max Profit (NPV): " << std::fixed << std::setprecision(2) << result.optimal_npv << "\n";
+    std::cout << "Selected projects (1-based): ";
     bool first = true;
-    for (int i = 0; i < tc.n; ++i) {
+    for (int i = 0; i < n; ++i) {
         if (result.solution[i] == 1) {
             if (!first) std::cout << ", ";
-            std::cout << i;
-            first = false;
+            std::cout << (i + 1); first = false;
         }
     }
-    std::cout << "\n";
+    if (first) std::cout << "none";
+    std::cout << "\nNodes explored: " << result.nodes_explored << "\n";
+    double used = 0.0;
+    for (int i = 0; i < n; ++i) if (result.solution[i]) used += costs[i];
+    std::cout << "Budget used: " << std::fixed << std::setprecision(2) << used << " / " << budget << "\n";
 
-    std::cout << "Budget used: ";
-    double total_cost = 0.0;
-    for (int i = 0; i < tc.n; ++i) {
-        if (result.solution[i] == 1) {
-            total_cost += tc.costs[i];
-        }
-    }
-    std::cout << std::fixed << std::setprecision(2) << total_cost
-              << " / " << tc.budget << "\n";
-
-    // Verify constraints
-    bool all_ok = true;
-    for (size_t j = 0; j < tc.constraints.A.size(); ++j) {
-        double lhs = 0.0;
-        for (int i = 0; i < tc.n; ++i) {
-            lhs += tc.constraints.A[j][i] * result.solution[i];
-        }
-        bool ok = lhs <= tc.constraints.b[j] + 1e-6;
-        if (!ok) {
-            std::cout << "CONSTRAINT VIOLATION (row " << j << "): "
-                      << std::fixed << std::setprecision(4) << lhs
-                      << " > " << tc.constraints.b[j] << "\n";
-            all_ok = false;
-        }
-    }
-    std::cout << "Constraints: " << (all_ok ? "All satisfied" : "VIOLATED")
-              << "\n";
-
-    // Check against expected
-    bool npv_match = std::abs(result.optimal_npv - tc.expected_npv) < 1e-6;
-    std::cout << "Expected NPV: " << std::fixed << std::setprecision(2)
-              << tc.expected_npv << " - "
-              << (npv_match ? "MATCH" : "MISMATCH") << "\n";
-
-    print_separator();
-    std::cout << "\n";
-}
-
-int main() {
-    std::cout << "=== Binary Integer Linear Programming Solver ===\n";
-    std::cout << "    Branch & Bound with Constraint Propagation\n\n";
-
-    // Run predefined test cases
-    std::vector<TestCase> test_cases = {
-        make_test_case_1(),
-        make_test_case_2(),
-    };
-
-    int passed = 0;
-    int total = static_cast<int>(test_cases.size());
-
-    for (const auto& tc : test_cases) {
-        SolverResult result;
-        bool ok = run_test_case(tc, result);
-        print_result(tc.name, result, tc);
-        if (ok) {
-            passed++;
-        }
-    }
-
-    std::cout << "Summary: " << passed << " / " << total << " tests passed\n";
-
-    return (passed == total) ? 0 : 1;
+    return 0;
 }
